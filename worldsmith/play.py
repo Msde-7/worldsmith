@@ -21,9 +21,11 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import platform
 import shutil
 import struct
 import subprocess
+import sys
 import threading
 import time
 import urllib.request
@@ -40,12 +42,32 @@ from .world import World
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME = ROOT / ".runtime"
 VERSION_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
-ADOPTIUM = ("https://api.adoptium.net/v3/binary/latest/{major}/ga/windows/x64/jre/"
+ADOPTIUM = ("https://api.adoptium.net/v3/binary/latest/{major}/ga/{os}/{arch}/jre/"
             "hotspot/normal/eclipse")
+
+WINDOWS = sys.platform == "win32"
+MACOS = sys.platform == "darwin"
 
 
 def log(message: str = "") -> None:
     print(message, flush=True)
+
+
+def adoptium_url(major: int) -> str:
+    """Adoptium names the platform in the path, so pick the right build."""
+    system = "windows" if WINDOWS else "mac" if MACOS else "linux"
+    machine = platform.machine().lower()
+    arch = "aarch64" if machine in ("arm64", "aarch64") else "x64"
+    return ADOPTIUM.format(major=major, os=system, arch=arch)
+
+
+def minecraft_dir() -> Path:
+    """Where the vanilla launcher keeps saves, datapacks and screenshots."""
+    if WINDOWS:
+        return Path(os.environ.get("APPDATA", Path.home() / "AppData/Roaming")) / ".minecraft"
+    if MACOS:
+        return Path.home() / "Library" / "Application Support" / "minecraft"
+    return Path.home() / ".minecraft"
 
 
 @dataclass
@@ -93,22 +115,30 @@ def ensure_runtime(version: str) -> Runtime:
     return Runtime(java=java, jar=jar, version=version)
 
 
+def _java_binaries(root: Path) -> list[Path]:
+    """java under an unpacked runtime. macOS buries it in Contents/Home."""
+    return sorted(root.rglob("java.exe" if WINDOWS else "java"))
+
+
 def _ensure_java(major: int) -> Path:
-    found = list(RUNTIME.glob(f"jre{major}/*/bin/java.exe"))
+    target = RUNTIME / f"jre{major}"
+    found = _java_binaries(target)
     if found:
         return found[0]
     system = shutil.which("java")
     if system and _java_major(Path(system)) >= major:
         return Path(system)
-    archive = RUNTIME / f"jre{major}.zip"
+    # unpack_archive picks the format from the suffix, so name it accordingly
+    archive = RUNTIME / (f"jre{major}.zip" if WINDOWS else f"jre{major}.tar.gz")
     if not archive.is_file():
-        _download(ADOPTIUM.format(major=major), archive, f"Java {major} runtime")
-    target = RUNTIME / f"jre{major}"
+        _download(adoptium_url(major), archive, f"Java {major} runtime")
     if not target.is_dir():
         shutil.unpack_archive(archive, target)
-    found = list(target.glob("*/bin/java.exe"))
+    found = _java_binaries(target)
     if not found:
-        raise SystemExit(f"could not find java.exe under {target}")
+        raise SystemExit(f"no java binary under {target}")
+    if not WINDOWS:
+        found[0].chmod(0o755)
     return found[0]
 
 
@@ -334,7 +364,7 @@ def generate_world(runtime: Runtime, work: Path, pack: Path, seed: int,
 
 
 def install_world(world_dir: Path, name: str) -> Path:
-    saves = Path(os.environ.get("APPDATA", str(Path.home()))) / ".minecraft" / "saves"
+    saves = minecraft_dir() / "saves"
     saves.mkdir(parents=True, exist_ok=True)
     folder = "".join(c for c in name if c.isalnum() or c in " -_").strip() or "worldsmith"
     dest = saves / folder
@@ -348,27 +378,45 @@ def install_world(world_dir: Path, name: str) -> Path:
 def install_datapack(pack: Path) -> Path | None:
     """Also drop the pack in .minecraft/datapacks so it shows up on the
     world-creation screen for new worlds."""
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        return None
-    folder = Path(appdata) / ".minecraft" / "datapacks"
+    folder = minecraft_dir() / "datapacks"
     folder.mkdir(parents=True, exist_ok=True)
     return export_zip(pack, folder / f"{pack.name}.zip")
 
 
+def launcher_candidates() -> list[Path]:
+    if WINDOWS:
+        return [
+            Path(r"C:\XboxGames\Minecraft Launcher\Content\Minecraft.exe"),
+            Path(r"C:\Program Files (x86)\Minecraft Launcher\MinecraftLauncher.exe"),
+            (Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Minecraft Launcher"
+             / "MinecraftLauncher.exe"),
+        ]
+    if MACOS:
+        return [Path("/Applications/Minecraft.app"),
+                Path.home() / "Applications" / "Minecraft.app"]
+    return [Path("/usr/bin/minecraft-launcher"), Path("/opt/minecraft-launcher/minecraft-launcher"),
+            Path("/var/lib/flatpak/exports/bin/com.mojang.Minecraft")]
+
+
 def launch_minecraft() -> str | None:
-    candidates = [
-        Path(r"C:\XboxGames\Minecraft Launcher\Content\Minecraft.exe"),
-        Path(r"C:\Program Files (x86)\Minecraft Launcher\MinecraftLauncher.exe"),
-        (Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Minecraft Launcher"
-         / "MinecraftLauncher.exe"),
-    ]
-    for path in candidates:
-        if path.is_file():
-            subprocess.Popen([str(path)], creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+    for path in launcher_candidates():
+        if MACOS and path.is_dir():
+            subprocess.Popen(["open", "-a", str(path)])
             return str(path)
-    try:                                   # the launcher registers a URL handler
-        os.startfile("minecraft://")
+        if path.is_file():
+            if WINDOWS:
+                subprocess.Popen([str(path)],
+                                 creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
+            else:
+                subprocess.Popen([str(path)], start_new_session=True)
+            return str(path)
+    # the launcher registers a minecraft:// URL handler on every platform
+    opener = ("start" if WINDOWS else "open" if MACOS else "xdg-open")
+    try:
+        if WINDOWS:
+            os.startfile("minecraft://")
+        else:
+            subprocess.Popen([opener, "minecraft://"], start_new_session=True)
         return "minecraft:// handler"
-    except OSError:
+    except (OSError, FileNotFoundError):
         return None

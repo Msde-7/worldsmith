@@ -185,6 +185,34 @@ def test_packs_generate():
                   not stats.get("empty") and stats.get("void_fraction", 1.0) < 0.98, str(stats))
 
 
+def test_platform_paths():
+    """`play` has to find the right runtime, saves folder and launcher on each OS."""
+    import platform
+
+    from worldsmith import play
+
+    real = (play.WINDOWS, play.MACOS, platform.machine)
+    cases = [
+        ("win32", "AMD64", "windows/x64", ".minecraft"),
+        ("darwin", "arm64", "mac/aarch64", "Application Support"),
+        ("darwin", "x86_64", "mac/x64", "Application Support"),
+        ("linux", "x86_64", "linux/x64", ".minecraft"),
+        ("linux", "aarch64", "linux/aarch64", ".minecraft"),
+    ]
+    try:
+        for name, machine, want_url, want_dir in cases:
+            play.WINDOWS = name == "win32"
+            play.MACOS = name == "darwin"
+            platform.machine = lambda m=machine: m
+            url = play.adoptium_url(25)
+            check(f"{name}/{machine} downloads the right runtime", want_url in url, url)
+            saves = str(play.minecraft_dir())
+            check(f"{name} looks for saves in the right place", want_dir in saves, saves)
+            check(f"{name} knows a launcher to try", bool(play.launcher_candidates()))
+    finally:
+        play.WINDOWS, play.MACOS, platform.machine = real
+
+
 def main():
     test_kernel_matches_numpy()
     test_sampling_modes_agree()
@@ -193,6 +221,7 @@ def main():
     test_validator_catches_breakage()
     test_unreachable_biome_detection()
     test_packs_generate()
+    test_platform_paths()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)
