@@ -171,8 +171,14 @@ render the result and *look at it* before iterating. Copy that directory into
 `~/.claude/skills/` to have it everywhere. The example packs were built exactly
 that way: describe, generate, render, look, adjust.
 
-## Credit
+## License and credit
 
-Validated against [deepslate](https://github.com/misode/deepslate) by misode, which
-also powers [misode.github.io/worldgen](https://misode.github.io/worldgen). Vanilla
-data is vendored from [misode/mcmeta](https://github.com/misode/mcmeta).
+MIT, see [LICENSE](LICENSE). One exception: `vanilla/26.2/` is Minecraft's own
+worldgen data, extracted by [misode/mcmeta](https://github.com/misode/mcmeta) and
+vendored here so the engine can be checked against it. That data belongs to Mojang
+and is not covered by this license.
+
+The engine is validated against [deepslate](https://github.com/misode/deepslate)
+(MIT) by misode, which also powers
+[misode.github.io/worldgen](https://misode.github.io/worldgen). worldsmith is an
+independent project and is not affiliated with or endorsed by Mojang or Microsoft.
