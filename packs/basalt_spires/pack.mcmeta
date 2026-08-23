@@ -1,0 +1,14 @@
+{
+  "pack": {
+    "pack_format": 107,
+    "description": "Sheer basalt spires over an acid sea",
+    "min_format": [
+      107,
+      0
+    ],
+    "max_format": [
+      107,
+      99
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:spline",
+      "spline": {
+        "coordinate": "canyons:mesa_terraces",
+        "points": [
+          {
+            "location": 0.0,
+            "value": -0.85,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.055,
+            "value": -0.4,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.115,
+            "value": 0.0,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.175,
+            "value": 0.45,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.245,
+            "value": 0.9,
+            "derivative": 0.0
+          }
+        ]
+      }
+    }
+  }
+}

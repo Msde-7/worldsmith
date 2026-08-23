@@ -1,0 +1,14 @@
+{
+  "pack": {
+    "pack_format": 107,
+    "min_format": [
+      107,
+      0
+    ],
+    "max_format": [
+      107,
+      99
+    ],
+    "description": "worldsmith verification: vanilla overworld terrain with no features or carvers"
+  }
+}

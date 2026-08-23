@@ -1,0 +1,14 @@
+{
+  "pack": {
+    "pack_format": 107,
+    "description": "Floating sky islands over an endless void",
+    "min_format": [
+      107,
+      0
+    ],
+    "max_format": [
+      107,
+      99
+    ]
+  }
+}

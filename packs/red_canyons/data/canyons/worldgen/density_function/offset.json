@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:add",
+      "argument1": {
+        "type": "minecraft:add",
+        "argument1": "canyons:base_offset",
+        "argument2": "canyons:mesa_terraces"
+      },
+      "argument2": "canyons:gorge_cut"
+    }
+  }
+}

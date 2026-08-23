@@ -1,0 +1,38 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:mul",
+      "argument1": 1.1,
+      "argument2": {
+        "type": "minecraft:spline",
+        "spline": {
+          "coordinate": "spires:spire_field",
+          "points": [
+            {
+              "location": -1.0,
+              "value": 0.0,
+              "derivative": 0.0
+            },
+            {
+              "location": 0.36,
+              "value": 0.0,
+              "derivative": 0.0
+            },
+            {
+              "location": 0.6,
+              "value": 1.0,
+              "derivative": 0.0
+            },
+            {
+              "location": 1.2,
+              "value": 1.0,
+              "derivative": 0.0
+            }
+          ]
+        }
+      }
+    }
+  }
+}

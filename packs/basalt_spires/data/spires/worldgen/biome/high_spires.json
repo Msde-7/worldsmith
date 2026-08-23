@@ -1,0 +1,29 @@
+{
+  "temperature": 0.6,
+  "downfall": 0.0,
+  "has_precipitation": false,
+  "effects": {
+    "water_color": "#8a9c1f"
+  },
+  "spawners": {},
+  "spawn_costs": {},
+  "carvers": [],
+  "features": [
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    []
+  ],
+  "attributes": {
+    "minecraft:visual/sky_color": "#3a3a44",
+    "minecraft:visual/fog_color": "#55555f",
+    "minecraft:visual/water_fog_color": "#5c6b12"
+  }
+}

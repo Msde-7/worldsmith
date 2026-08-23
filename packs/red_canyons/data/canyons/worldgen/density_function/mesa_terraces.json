@@ -1,0 +1,64 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:spline",
+      "spline": {
+        "coordinate": "canyons:mesa_step",
+        "points": [
+          {
+            "location": -1.0,
+            "value": 0.0,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.34,
+            "value": 0.0,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.3,
+            "value": 0.055,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.1,
+            "value": 0.055,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.06,
+            "value": 0.115,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.16,
+            "value": 0.115,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.2,
+            "value": 0.175,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.44,
+            "value": 0.175,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.48,
+            "value": 0.245,
+            "derivative": 0.0
+          },
+          {
+            "location": 1.0,
+            "value": 0.245,
+            "derivative": 0.0
+          }
+        ]
+      }
+    }
+  }
+}

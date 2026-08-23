@@ -1,0 +1,9 @@
+# server jar, Java runtime and scratch worlds (`worldsmith play`, verify_in_game)
+.runtime/
+
+__pycache__/
+*.pyc
+
+# regenerate with `npm install` in tools/oracle
+tools/oracle/node_modules/
+tools/oracle/package-lock.json

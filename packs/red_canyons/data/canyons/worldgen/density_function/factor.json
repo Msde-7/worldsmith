@@ -1,0 +1,34 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:spline",
+      "spline": {
+        "coordinate": "canyons:gorge_dist",
+        "points": [
+          {
+            "location": 0.0,
+            "value": 7.0,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.05,
+            "value": 11.0,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.2,
+            "value": 15.0,
+            "derivative": 0.0
+          },
+          {
+            "location": 1.0,
+            "value": 16.0,
+            "derivative": 0.0
+          }
+        ]
+      }
+    }
+  }
+}

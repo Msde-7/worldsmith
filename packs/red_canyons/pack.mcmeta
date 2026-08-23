@@ -1,0 +1,14 @@
+{
+  "pack": {
+    "pack_format": 107,
+    "description": "Red canyon lands cut by slot gorges",
+    "min_format": [
+      107,
+      0
+    ],
+    "max_format": [
+      107,
+      99
+    ]
+  }
+}

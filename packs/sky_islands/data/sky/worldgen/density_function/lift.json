@@ -1,0 +1,34 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:spline",
+      "spline": {
+        "coordinate": "sky:island_lift",
+        "points": [
+          {
+            "location": -1.0,
+            "value": -0.34,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.3,
+            "value": -0.12,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.3,
+            "value": 0.12,
+            "derivative": 0.0
+          },
+          {
+            "location": 1.0,
+            "value": 0.36,
+            "derivative": 0.0
+          }
+        ]
+      }
+    }
+  }
+}

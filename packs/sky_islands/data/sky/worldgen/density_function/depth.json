@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:add",
+  "argument1": "sky:band",
+  "argument2": {
+    "type": "minecraft:add",
+    "argument1": "sky:island_mask",
+    "argument2": "sky:lift"
+  }
+}
