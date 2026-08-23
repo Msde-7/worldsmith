@@ -8,7 +8,10 @@ Minecraft's world generation has been pure data since 1.18: density functions,
 splines, surface rules, biome boxes. What is missing is the other half of the loop,
 a way to *see* what the JSON does without launching the game and flying around.
 worldsmith is that half: a reimplementation of the game's worldgen in Python that
-draws the terrain in seconds.
+draws the terrain in seconds. Then `worldsmith play` builds the world and drops
+you in it:
+
+![basalt spires in game](renders/ingame_spires.jpg)
 
 ```bash
 git clone https://github.com/Msde-7/worldsmith
@@ -85,11 +88,13 @@ near zero along a winding line; the benches are a staircase spline that turns
 smooth noise into flat tops with abrupt risers.
 
 ![red canyons](renders/canyons.png)
+![red canyons in game](renders/ingame_canyons.jpg)
 
 `sky_islands`: `depth` as a band instead of a ramp, two opposing y gradients
 min-ed together, so terrain has a top *and* a bottom and the void takes the rest.
 
 ![sky islands](renders/sky_islands.png)
+![sky islands in game](renders/ingame_sky_islands.jpg)
 
 `tools/build_canyons.py` and `tools/build_skyislands.py` are the scripts that wrote
 those two, kept because spline points read better as numbers with comments next to
