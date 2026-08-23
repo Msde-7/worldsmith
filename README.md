@@ -39,9 +39,10 @@ exact matches    : 331776 (100.000%)
 max  |error|     : 0 blocks
 ```
 
-Same story on vanilla's own terrain: 51,200 columns, 100.000% exact. Turn
-aquifers on, which the engine deliberately does not model, and it drops to 99.19%
-with a mean error of 0.12 blocks. That gap is the whole of the difference.
+Same story on vanilla's own terrain, aquifers and all: 51,200 columns, 99.959%
+exact, mean error 0.002 blocks. Aquifers are the hard part there, since the game
+walls off underground water with stone that shows up in the heightmap; modelling
+them took that sample from 99.19% to 99.96%.
 
 Underneath, 170 checks pin the engine to [deepslate](https://github.com/misode/deepslate)
 and to real JVM output: all 35 vanilla density functions, all 7 dimension routers,
@@ -130,6 +131,7 @@ the mandatory router fields, and biome boxes that can never win.
 | `worldsmith/density.py` | every density function node, compiled and vectorised |
 | `worldsmith/terrain.py` | heightmaps and cross-sections; lattice or per-block sampling |
 | `worldsmith/surface.py` | surface rules, including the badlands clay bands |
+| `worldsmith/aquifer.py` | underground fluid levels and the stone barriers between them |
 | `worldsmith/climate.py` | multi-noise biome assignment, and unreachable-biome detection |
 | `worldsmith/validate.py` | schema, references, splines, block ids, biome boxes |
 | `worldsmith/render.py` | the four views and the contact sheet |
@@ -145,9 +147,10 @@ else, vanilla included, falls back to an exact per-block scan.
 
 ## Known limits
 
-* **Aquifers are not modelled**, so with `aquifers_enabled: true` the game can seal
-  underground voids with stone the engine does not draw. Custom packs generally
-  leave them off; vanilla has them on.
+* **Aquifer boundaries are not perfect.** The fluid levels and the barriers
+  between them are modelled, but where the game's floodedness check is a near
+  tie the engine can pick the other side, which is the last 0.04% of columns.
+  Most custom packs leave `aquifers_enabled` off and are unaffected.
 * **Carvers and features are not run.** No caves, trees or ores. The preview is
   bare worldgen terrain, which is what you are editing.
 * **Vanilla's biome presets cannot be previewed.** `{"preset": "minecraft:overworld"}`
@@ -161,7 +164,7 @@ Vanilla itself, rendered by the engine:
 ## Tests
 
 ```bash
-python tests/run_all.py                              # 203 checks, no network
+python tests/run_all.py                              # 221 checks, no network
 python tools/verify_in_game.py packs/basalt_spires   # the real game, opt-in
 ```
 

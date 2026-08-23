@@ -219,11 +219,57 @@ class XoroshiroPositional:
         s = lo + np.uint64(self.hi)
         return ((s << np.uint64(17)) | (s >> np.uint64(47))) + lo
 
+    def at_batch(self, x, y, z) -> "XoroshiroBatch":
+        """A stream per position, seeded exactly as at(x, y, z) would be."""
+        lo = get_seed_np(x, y, z).astype(np.uint64) ^ np.uint64(self.lo)
+        hi = np.full(np.shape(lo), self.hi, dtype=np.uint64)
+        return XoroshiroBatch(lo, hi)
+
     def at_next_double(self, x, y, z) -> np.ndarray:
         return (self._first_draw(x, y, z) >> np.uint64(11)).astype(np.float64) * DOUBLE_MULTIPLIER
 
     def at_next_float(self, x, y, z) -> np.ndarray:
         return (self._first_draw(x, y, z) >> np.uint64(40)).astype(np.float64) * FLOAT_MULTIPLIER
+
+
+class XoroshiroBatch:
+    """Many independent xoroshiro streams advanced in lockstep.
+
+    The aquifer grid needs three next_int draws from a stream seeded at every
+    cell it looks at, which is far too many positions to walk one at a time.
+    """
+
+    def __init__(self, lo, hi):
+        self.lo = np.asarray(lo, dtype=np.uint64).copy()
+        self.hi = np.asarray(hi, dtype=np.uint64).copy()
+
+    def next(self) -> np.ndarray:
+        lo, hi = self.lo, self.hi
+        s = lo + hi
+        value = ((s << np.uint64(17)) | (s >> np.uint64(47))) + lo
+        hi = hi ^ lo
+        self.lo = ((lo << np.uint64(49)) | (lo >> np.uint64(15))) ^ hi ^ (hi << np.uint64(21))
+        self.hi = (hi << np.uint64(28)) | (hi >> np.uint64(36))
+        return value
+
+    def next_int(self, bound: int) -> np.ndarray:
+        """Lemire's bounded draw, with the same rejection step as the game.
+
+        The retry is taken about once in 700 million draws for the bounds the
+        aquifer uses, but it has to be there or a stream can desynchronise.
+        """
+        value = self.next() & np.uint64(MASK32)
+        product = value * np.uint64(bound)
+        product_lo = product & np.uint64(MASK32)
+        threshold = np.uint64(((~bound & MASK32) + 1) % bound)
+        retry = product_lo < threshold
+        while np.any(retry):
+            redraw = self.next() & np.uint64(MASK32)
+            value = np.where(retry, redraw, value)
+            product = value * np.uint64(bound)
+            product_lo = product & np.uint64(MASK32)
+            retry = retry & (product_lo < threshold)
+        return (product >> np.uint64(32)).astype(np.int64)
 
 
 class LegacyPositional:

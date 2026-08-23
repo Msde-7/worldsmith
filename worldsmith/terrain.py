@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .aquifer import Aquifer
 from .density import Ctx, Interpolated, Marker, prepare
 from .world import World
 
@@ -172,9 +173,23 @@ def _compact_cache(cache2d: dict, keep: np.ndarray, width: int) -> dict:
     return out
 
 
+def _with_aquifer(aquifer, values, xs, zs, ys) -> np.ndarray:
+    """Raise the density where an aquifer barrier would turn air into stone."""
+    air = values <= SOLID
+    if not air.any():
+        return values
+    x = np.broadcast_to(xs, values.shape)[air].astype(np.int64)
+    z = np.broadcast_to(zs, values.shape)[air].astype(np.int64)
+    y = np.broadcast_to(ys, values.shape)[air].astype(np.int64)
+    values = values.copy()
+    values[air] += aquifer.pressure(x, y, z)
+    return values
+
+
 def scan_surface(world: World, node, x_flat, z_flat, batch: int = 2048,
                  slab: int = 48, hint: np.ndarray | None = None,
-                 margin: int | None = None) -> tuple[np.ndarray, np.ndarray]:
+                 margin: int | None = None,
+                 aquifer: Aquifer | None = None) -> tuple[np.ndarray, np.ndarray]:
     """The game's own algorithm: evaluate every block from the top down and take
     the first with density above 0. Exact whatever the tree contains.
 
@@ -208,6 +223,8 @@ def scan_surface(world: World, node, x_flat, z_flat, batch: int = 2048,
             probe = Ctx(xs, np.array([[float(y_hi)]]), zs, cache2d=cache2d)
             values = np.broadcast_to(np.asarray(node.eval(probe), dtype=np.float64),
                                      (1, columns.size))
+            if aquifer is not None:
+                values = _with_aquifer(aquifer, values, xs, zs, np.array([[y_hi]]))
             if np.any(values > SOLID):        # started inside rock: be safe
                 y_hi = top
                 cache2d = {}
@@ -217,6 +234,8 @@ def scan_surface(world: World, node, x_flat, z_flat, batch: int = 2048,
             ctx = Ctx(xs, ys[:, None], zs, cache2d=cache2d)
             values = np.broadcast_to(np.asarray(node.eval(ctx), dtype=np.float64),
                                      (ys.size, columns.size))
+            if aquifer is not None:
+                values = _with_aquifer(aquifer, values, xs, zs, ys[:, None])
             solid = values > SOLID
             hit = solid.any(axis=0)
             if hit.any():
@@ -240,9 +259,10 @@ def sample_terrain(world: World, x0: int, z0: int, nx: int, nz: int, step: int =
     node = world.router["final_density"]
     prepare(node)
     x_flat, z_flat = column_grid(x0, z0, nx, nz, step)
+    aquifer = Aquifer(world) if world.aquifers_enabled else None
     mode = sampling
     if mode == "auto":
-        mode = "lattice" if cell_interpolated(node) else "block"
+        mode = "lattice" if (cell_interpolated(node) and aquifer is None) else "block"
 
     if y_levels is None:
         y_levels = lattice_y(world)
@@ -254,7 +274,8 @@ def sample_terrain(world: World, x0: int, z0: int, nx: int, nz: int, step: int =
         approx = sample_density(world, node, x_flat, z_flat, y_levels, batch=batch)
         hint, _ = surface_from_density(approx, y_levels)
         del approx
-        surface, any_solid = scan_surface(world, node, x_flat, z_flat, hint=hint)
+        surface, any_solid = scan_surface(world, node, x_flat, z_flat, hint=hint,
+                                          aquifer=aquifer)
 
     below = world.noise.min_y - 1
     surface = np.where(any_solid, surface, below)

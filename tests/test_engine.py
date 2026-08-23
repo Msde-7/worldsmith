@@ -185,6 +185,54 @@ def test_packs_generate():
                   not stats.get("empty") and stats.get("void_fraction", 1.0) < 0.98, str(stats))
 
 
+def test_aquifer_levels():
+    """Fluid levels against ones read out of a world the real server generated.
+
+    Both numbers this pins were wrong in the obvious reference implementation:
+    the level ladder needs the factor of 10, and the surface sampling returns on
+    the sample that reaches above the surface rather than on the centre.
+    """
+    from worldsmith.aquifer import Aquifer
+
+    with open(os.path.join(HERE, "golden", "aquifer_levels.json"), encoding="utf-8") as f:
+        golden = json.load(f)
+    world = World.create(Registries.load(), golden["settings"], golden["seed"])
+    aquifer = Aquifer(world)
+    centres = np.array([s["centre"] for s in golden["samples"]], dtype=np.int64)
+    want = np.array([s["level"] for s in golden["samples"]], dtype=np.int64)
+    got, _ = aquifer._compute_status(centres[:, 0], centres[:, 1], centres[:, 2])
+    check("aquifer fluid levels match the generated world", np.array_equal(got, want),
+          f"{list(zip(want.tolist(), got.tolist()))[:6]}")
+
+
+def test_aquifer_barrier():
+    """The stone wall an aquifer boundary leaves behind, block for block.
+
+    At this column the server wrote water down to y 28, four blocks of stone,
+    then an air pocket: exactly the barrier the engine used to miss.
+    """
+    from worldsmith.aquifer import Aquifer
+    from worldsmith.density import Ctx
+
+    world = World.create(Registries.load(), "minecraft:overworld", 12345)
+    aquifer = Aquifer(world)
+    node = world.router["final_density"]
+    prepare(node)
+    x, z = -159, -266
+    ys = np.arange(30, 21, -1, dtype=np.int64)
+    ctx = Ctx(np.array([[float(x)]]), ys[:, None].astype(float), np.array([[float(z)]]))
+    density = np.ravel(np.broadcast_to(np.asarray(node.eval(ctx), float), (len(ys), 1)))
+    pressure = aquifer.pressure(np.full(len(ys), x), ys, np.full(len(ys), z))
+    solid = (density + pressure) > 0
+    want = np.array([y in (24, 25, 26, 27) for y in ys])
+    check("aquifer barrier lands on the blocks the game placed", np.array_equal(solid, want),
+          f"solid at {ys[solid].tolist()}, expected [27, 26, 25, 24]")
+
+    check("aquifers only apply where the pack asks for them",
+          not World.create(Registries.load([os.path.join(ROOT, "packs", "basalt_spires")]),
+                           "spires:basalt_spires", 1).aquifers_enabled)
+
+
 def test_platform_paths():
     """`play` has to find the right runtime, saves folder and launcher on each OS."""
     import platform
@@ -221,6 +269,8 @@ def main():
     test_validator_catches_breakage()
     test_unreachable_biome_detection()
     test_packs_generate()
+    test_aquifer_levels()
+    test_aquifer_barrier()
     test_platform_paths()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:

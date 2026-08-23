@@ -69,6 +69,7 @@ class World:
     default_block: str
     default_fluid: str
     legacy_random_source: bool
+    aquifers_enabled: bool = False
     router: dict[str, Node] = field(default_factory=dict)
     surface_rule: dict | None = None
     compiler: DensityCompiler | None = None
@@ -164,6 +165,7 @@ class World:
             default_block=(settings.get("default_block") or {}).get("Name", "minecraft:stone"),
             default_fluid=(settings.get("default_fluid") or {}).get("Name", "minecraft:water"),
             legacy_random_source=bool(settings.get("legacy_random_source", False)),
+            aquifers_enabled=bool(settings.get("aquifers_enabled", False)),
             surface_rule=settings.get("surface_rule"),
         )
         world.compiler = DensityCompiler(world)
