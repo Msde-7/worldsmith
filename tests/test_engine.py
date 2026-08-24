@@ -164,6 +164,7 @@ def test_biome_tags():
         "no values": ({"replace": False}, "tag has no 'values'"),
         "values not a list": ({"values": "bad:plains_like"}, "'values' must be a list"),
         "empty tag": ({"values": []}, "does nothing"),
+        "empty tag that does not replace": ({"replace": False, "values": []}, "does nothing"),
         "misspelled field": ({"values": [], "value": []}, "tag has no field 'value'"),
         "replace not a bool": ({"replace": "false", "values": []}, "must be true or false"),
         "listed twice": ({"values": ["bad:plains_like"] * 2}, "listed twice"),
@@ -181,6 +182,8 @@ def test_biome_tags():
         "vanilla tag ref": {"values": ["#minecraft:is_overworld"]},
         "another pack's tag": {"values": ["#other:whatever"]},
         "optional and absent": {"values": [{"id": "bad:not_here", "required": False}]},
+        # replace + empty is how a vanilla tag gets switched off, not a mistake
+        "empty tag that replaces": {"replace": True, "values": []},
         # '#x' is a tag reference and 'x' is a biome: not the same entry twice
         "tag ref beside a biome of that name":
             {"values": ["#minecraft:plains", "minecraft:plains"]},

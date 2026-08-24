@@ -538,8 +538,10 @@ class Validator:
         if not isinstance(values, list):
             self.add(ERROR, where, "'values' must be a list")
             return
-        if not values:
-            self.add(WARNING, where, "tag is empty, so it does nothing")
+        if not values and obj.get("replace") is not True:
+            # "replace": true with an empty list is the way to switch a vanilla
+            # tag off, so only an empty *additive* tag is pointless
+            self.add(WARNING, where, "tag is empty and does not replace, so it does nothing")
         seen: set[str] = set()
         for i, entry in enumerate(values):
             self.check_tag_entry(f"{where}/values[{i}]", entry, seen)
