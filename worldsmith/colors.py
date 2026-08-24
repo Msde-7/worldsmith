@@ -29,6 +29,8 @@ BLOCK_COLORS: dict[str, tuple[int, int, int]] = {
     # sand / sandstone
     "sand": (219, 207, 163), "red_sand": (190, 102, 33), "sandstone": (216, 203, 155),
     "red_sandstone": (190, 102, 33), "soul_sand": (81, 62, 50), "soul_soil": (75, 57, 46),
+    "smooth_sandstone": (223, 214, 170), "cut_sandstone": (219, 208, 165),
+    "chiseled_sandstone": (216, 204, 158),
     # snow / ice
     "snow_block": (249, 254, 254), "snow": (249, 254, 254), "powder_snow": (249, 254, 254),
     "ice": (145, 183, 253), "packed_ice": (141, 180, 250), "blue_ice": (116, 167, 253),
@@ -67,6 +69,7 @@ BLOCK_COLORS: dict[str, tuple[int, int, int]] = {
     # misc
     "air": (0, 0, 0), "cave_air": (0, 0, 0), "glass": (200, 220, 235),
     "honey_block": (251, 184, 48), "slime_block": (111, 192, 91),
+    "honeycomb_block": (229, 148, 30),
     "bone_block": (229, 225, 206), "ochre_froglight": (250, 240, 195),
     "verdant_froglight": (218, 235, 205), "pearlescent_froglight": (243, 220, 232),
     "mossy_cobblestone": (110, 118, 95), "cobbled_deepslate": (77, 77, 80),
@@ -74,6 +77,14 @@ BLOCK_COLORS: dict[str, tuple[int, int, int]] = {
     "polished_blackstone": (53, 48, 56), "gilded_blackstone": (69, 44, 39),
     "crying_obsidian": (32, 10, 60), "ancient_debris": (94, 66, 60),
     "sulfur": (214, 197, 84), "cinnabar": (166, 63, 52),
+    # stylised-terrain blocks packs reach for that were not yet listed
+    "smooth_red_sandstone": (181, 97, 31), "cut_red_sandstone": (184, 99, 33),
+    "chiseled_red_sandstone": (181, 97, 31), "packed_mud": (142, 106, 79),
+    "mud_bricks": (137, 102, 78), "muddy_mangrove_roots": (70, 51, 39),
+    "hay_block": (166, 138, 21), "dried_kelp_block": (49, 61, 43),
+    "orange_wool": (240, 118, 19), "orange_concrete_powder": (227, 132, 32),
+    "exposed_copper": (161, 125, 100), "weathered_copper": (108, 153, 122),
+    "red_mushroom_block": (203, 46, 43), "brown_mushroom_block": (149, 111, 79),
 }
 
 # grass tint anchors sampled from vanilla's grass colormap: (temperature, downfall) -> rgb

@@ -364,6 +364,61 @@ def test_caves_and_decoration():
           decoration_of("minecraft:desert")["carvers"] != [])
 
 
+def test_grass_tint_and_block_colours():
+    """The preview has to show the colour the game will show.
+
+    A biome's effects.grass_color overrides the temperature/downfall colormap,
+    so a pack that tints its turf was previewed in vanilla green: the render
+    disagreed with the game about the single most visible thing in it.
+    """
+    import numpy as np
+
+    from worldsmith.climate import BiomeSource
+    from worldsmith.colors import BLOCK_COLORS, grass_color
+    from worldsmith.render import render_map
+    from worldsmith.scene import build_scene
+
+    # every key has to be a real block, or it silently renders magenta for ever
+    ids = set(json.loads((Path(ROOT) / "vanilla" / "26.2" / "blocks.json")
+                         .read_text(encoding="utf-8"))["blocks"])
+    unknown = sorted(k for k in BLOCK_COLORS if f"minecraft:{k}" not in ids)
+    check("every block colour names a real block", not unknown, str(unknown))
+
+    tinted, plain = (0x2B, 0x8C, 0xD9), None       # a blue no colormap would produce
+    tmp = tempfile.mkdtemp(prefix="worldsmith-tint-")
+    try:
+        for label, tint in (("tinted", tinted), ("untinted", plain)):
+            root = Path(tmp) / label
+            scaffold(root, "tint", "tint", template="basic")
+            path = root / "data/tint/worldgen/biome/plains_like.json"
+            biome = json.loads(path.read_text(encoding="utf-8"))
+            if tint is not None:
+                biome["effects"]["grass_color"] = "#%02X%02X%02X" % tint
+            path.write_text(json.dumps(biome), encoding="utf-8")
+
+            registries = Registries.load([str(root)])
+            world = World.create(registries, "tint:tint", 12345)
+            source = BiomeSource.from_json(
+                registries.get("dimension", "tint:tint")["generator"]["biome_source"])
+            # most of the basic template is ocean, so look until a window has turf
+            for x0, z0 in ((-1024, 512), (512, 512), (2048, -2048), (0, 0)):
+                scene = build_scene(world, source, x0, z0, 32, 32, step=4)
+                grass = np.array([n.split(":")[-1] == "grass_block" for n in scene.palette],
+                                 dtype=bool)[np.asarray(scene.surface_block).ravel()]
+                if grass.any():
+                    break
+            check(f"{label}: found a sample with grass in it", grass.any())
+            if not grass.any():
+                continue
+            pixels = np.asarray(render_map(scene, scale=1, shade=False)).reshape(-1, 3)
+            used = {tuple(int(v) for v in p) for p in pixels[grass]}
+            expected = tint if tint is not None else grass_color(
+                biome["temperature"], biome["downfall"])
+            check(f"{label} grass renders as {expected}", used == {expected}, str(sorted(used)[:4]))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_play_generates_structures():
     """`play` must ask the server for structures.
 
@@ -422,6 +477,7 @@ def main():
     test_aquifer_levels()
     test_aquifer_barrier()
     test_caves_and_decoration()
+    test_grass_tint_and_block_colours()
     test_play_generates_structures()
     test_platform_paths()
     print(f"{checks - len(failures)}/{checks} checks passed")

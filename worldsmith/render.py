@@ -39,10 +39,19 @@ def hillshade(height: np.ndarray, step: int, azimuth: float = 315.0, altitude: f
 
 
 def _grass_tint(scene: Scene) -> np.ndarray:
-    """Per-pixel grass tint from the biome's temperature and downfall."""
+    """Per-pixel grass tint.
+
+    An explicit `effects.grass_color` on the biome overrides the climate
+    colormap, exactly as the game does; otherwise fall back to temperature
+    and downfall.
+    """
     table = biome_climate_table(scene.world, scene.biomes)
-    colors = np.array([grass_color(t, d) for t, d in table], dtype=np.float64)
-    return colors[scene.biome_index]
+    colors = []
+    for ident, (t, d) in zip(scene.biomes, table):
+        effects = (scene.world.registries.get("biome", ident) or {}).get("effects") or {}
+        # parse_hex falls back to the colormap when the key is absent or malformed
+        colors.append(parse_hex(effects.get("grass_color"), grass_color(t, d)))
+    return np.array(colors, dtype=np.float64)[scene.biome_index]
 
 
 def render_map(scene: Scene, scale: int = 4, shade: bool = True, tint_grass: bool = True,
