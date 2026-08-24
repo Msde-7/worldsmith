@@ -1,0 +1,312 @@
+{
+  "type": "minecraft:overworld",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "mesas:terraced_mesas",
+    "biome_source": {
+      "type": "minecraft:multi_noise",
+      "biomes": [
+        {
+          "biome": "mesas:rust_deep",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.2,
+              -0.455
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:rust_sea",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.455,
+              -0.19
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:ochre_shore",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.19,
+              -0.11
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:layered_mesa",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              0.1,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              0.55
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              0.4,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:banded_ridges",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              -0.28
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.4
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:bleached_dunes",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              -0.3
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -0.28,
+              1.0
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.4
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:amber_thicket",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              0.28,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -0.28,
+              0.45
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.4
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:still_hollow",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -0.3,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              0.45,
+              1.0
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.4
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:ember_downs",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -0.3,
+              0.28
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -0.28,
+              0.45
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.4
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "mesas:ember_downs",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.11,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              -1.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.22
+          }
+        }
+      ]
+    }
+  }
+}

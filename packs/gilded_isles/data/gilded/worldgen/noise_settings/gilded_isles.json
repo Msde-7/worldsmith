@@ -1,0 +1,568 @@
+{
+  "sea_level": -64,
+  "disable_mob_generation": false,
+  "aquifers_enabled": false,
+  "ore_veins_enabled": true,
+  "legacy_random_source": false,
+  "default_block": {
+    "Name": "minecraft:stone"
+  },
+  "default_fluid": {
+    "Name": "minecraft:water",
+    "Properties": {
+      "level": "0"
+    }
+  },
+  "noise": {
+    "min_y": -64,
+    "height": 384,
+    "size_horizontal": 1,
+    "size_vertical": 2
+  },
+  "spawn_target": [
+    {
+      "temperature": [
+        -0.45,
+        0.55
+      ],
+      "humidity": [
+        -0.35,
+        0.55
+      ],
+      "continentalness": [
+        0.45,
+        1.0
+      ],
+      "erosion": [
+        -0.4,
+        0.7
+      ],
+      "depth": [
+        0.0,
+        1.0
+      ],
+      "weirdness": [
+        -0.6,
+        0.6
+      ],
+      "offset": 0.0
+    }
+  ],
+  "noise_router": {
+    "barrier": 0.0,
+    "fluid_level_floodedness": 0.0,
+    "fluid_level_spread": 0.0,
+    "lava": 0.0,
+    "temperature": "gilded:temperature",
+    "vegetation": "gilded:vegetation",
+    "continents": "gilded:continents",
+    "erosion": "gilded:erosion",
+    "depth": "gilded:depth",
+    "ridges": "gilded:ridges",
+    "preliminary_surface_level": {
+      "type": "minecraft:find_top_surface",
+      "cell_height": 8,
+      "lower_bound": -64,
+      "upper_bound": 320.0,
+      "density": "gilded:sloped_cheese"
+    },
+    "final_density": "gilded:final_density",
+    "vein_toggle": "gilded:vein_toggle",
+    "vein_ridged": "gilded:vein_ridged",
+    "vein_gap": "gilded:vein_gap"
+  },
+  "surface_rule": {
+    "type": "minecraft:sequence",
+    "sequence": [
+      {
+        "type": "minecraft:condition",
+        "if_true": {
+          "type": "minecraft:above_preliminary_surface"
+        },
+        "then_run": {
+          "type": "minecraft:condition",
+          "if_true": {
+            "type": "minecraft:stone_depth",
+            "offset": 0,
+            "surface_type": "floor",
+            "add_surface_depth": false,
+            "secondary_depth_range": 0
+          },
+          "then_run": {
+            "type": "minecraft:sequence",
+            "sequence": [
+              {
+                "type": "minecraft:condition",
+                "if_true": {
+                  "type": "minecraft:steep"
+                },
+                "then_run": {
+                  "type": "minecraft:sequence",
+                  "sequence": [
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface_secondary",
+                        "min_threshold": 0.25,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:yellow_terracotta"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:block",
+                      "result_state": {
+                        "Name": "minecraft:sandstone"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "minecraft:condition",
+                "if_true": {
+                  "type": "minecraft:biome",
+                  "biome_is": [
+                    "gilded:amber_dunes"
+                  ]
+                },
+                "then_run": {
+                  "type": "minecraft:sequence",
+                  "sequence": [
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface",
+                        "min_threshold": 0.25,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:yellow_terracotta"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface_secondary",
+                        "min_threshold": 0.45,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:cut_sandstone"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:block",
+                      "result_state": {
+                        "Name": "minecraft:sand"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "minecraft:condition",
+                "if_true": {
+                  "type": "minecraft:biome",
+                  "biome_is": [
+                    "gilded:citrine_bluffs"
+                  ]
+                },
+                "then_run": {
+                  "type": "minecraft:sequence",
+                  "sequence": [
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface",
+                        "min_threshold": -0.2,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:yellow_terracotta"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface_secondary",
+                        "min_threshold": 0.3,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:cut_sandstone"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:block",
+                      "result_state": {
+                        "Name": "minecraft:sandstone"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "minecraft:condition",
+                "if_true": {
+                  "type": "minecraft:biome",
+                  "biome_is": [
+                    "gilded:brimstone_shoals"
+                  ]
+                },
+                "then_run": {
+                  "type": "minecraft:sequence",
+                  "sequence": [
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface",
+                        "min_threshold": 0.35,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:sand"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface_secondary",
+                        "min_threshold": 0.6,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:coarse_dirt"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:block",
+                      "result_state": {
+                        "Name": "minecraft:grass_block",
+                        "Properties": {
+                          "snowy": "false"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "minecraft:condition",
+                "if_true": {
+                  "type": "minecraft:biome",
+                  "biome_is": [
+                    "gilded:sunspire_reach"
+                  ]
+                },
+                "then_run": {
+                  "type": "minecraft:sequence",
+                  "sequence": [
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface_secondary",
+                        "min_threshold": 0.38,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:glowstone"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface",
+                        "min_threshold": 0.15,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:sand"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:block",
+                      "result_state": {
+                        "Name": "minecraft:grass_block",
+                        "Properties": {
+                          "snowy": "false"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "minecraft:condition",
+                "if_true": {
+                  "type": "minecraft:biome",
+                  "biome_is": [
+                    "gilded:honeyfall_hollow"
+                  ]
+                },
+                "then_run": {
+                  "type": "minecraft:sequence",
+                  "sequence": [
+                    {
+                      "type": "minecraft:condition",
+                      "if_true": {
+                        "type": "minecraft:noise_threshold",
+                        "noise": "minecraft:surface",
+                        "min_threshold": 0.5,
+                        "max_threshold": 2.0,
+                        "is_3d": false
+                      },
+                      "then_run": {
+                        "type": "minecraft:block",
+                        "result_state": {
+                          "Name": "minecraft:honeycomb_block"
+                        }
+                      }
+                    },
+                    {
+                      "type": "minecraft:block",
+                      "result_state": {
+                        "Name": "minecraft:grass_block",
+                        "Properties": {
+                          "snowy": "false"
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "minecraft:condition",
+                "if_true": {
+                  "type": "minecraft:noise_threshold",
+                  "noise": "minecraft:surface",
+                  "min_threshold": 0.45,
+                  "max_threshold": 2.0,
+                  "is_3d": false
+                },
+                "then_run": {
+                  "type": "minecraft:block",
+                  "result_state": {
+                    "Name": "minecraft:sand"
+                  }
+                }
+              },
+              {
+                "type": "minecraft:block",
+                "result_state": {
+                  "Name": "minecraft:grass_block",
+                  "Properties": {
+                    "snowy": "false"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "minecraft:condition",
+        "if_true": {
+          "type": "minecraft:stone_depth",
+          "offset": 0,
+          "surface_type": "floor",
+          "add_surface_depth": true,
+          "secondary_depth_range": 0
+        },
+        "then_run": {
+          "type": "minecraft:sequence",
+          "sequence": [
+            {
+              "type": "minecraft:condition",
+              "if_true": {
+                "type": "minecraft:biome",
+                "biome_is": [
+                  "gilded:amber_dunes",
+                  "gilded:sunspire_reach"
+                ]
+              },
+              "then_run": {
+                "type": "minecraft:block",
+                "result_state": {
+                  "Name": "minecraft:sand"
+                }
+              }
+            },
+            {
+              "type": "minecraft:condition",
+              "if_true": {
+                "type": "minecraft:biome",
+                "biome_is": [
+                  "gilded:citrine_bluffs"
+                ]
+              },
+              "then_run": {
+                "type": "minecraft:block",
+                "result_state": {
+                  "Name": "minecraft:yellow_terracotta"
+                }
+              }
+            },
+            {
+              "type": "minecraft:condition",
+              "if_true": {
+                "type": "minecraft:biome",
+                "biome_is": [
+                  "gilded:brimstone_shoals"
+                ]
+              },
+              "then_run": {
+                "type": "minecraft:sequence",
+                "sequence": [
+                  {
+                    "type": "minecraft:condition",
+                    "if_true": {
+                      "type": "minecraft:noise_threshold",
+                      "noise": "minecraft:surface",
+                      "min_threshold": 0.35,
+                      "max_threshold": 2.0,
+                      "is_3d": false
+                    },
+                    "then_run": {
+                      "type": "minecraft:block",
+                      "result_state": {
+                        "Name": "minecraft:sand"
+                      }
+                    }
+                  },
+                  {
+                    "type": "minecraft:block",
+                    "result_state": {
+                      "Name": "minecraft:dirt"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "minecraft:block",
+              "result_state": {
+                "Name": "minecraft:dirt"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "minecraft:condition",
+        "if_true": {
+          "type": "minecraft:stone_depth",
+          "offset": 8,
+          "surface_type": "floor",
+          "add_surface_depth": true,
+          "secondary_depth_range": 0
+        },
+        "then_run": {
+          "type": "minecraft:block",
+          "result_state": {
+            "Name": "minecraft:sandstone"
+          }
+        }
+      },
+      {
+        "type": "minecraft:condition",
+        "if_true": {
+          "type": "minecraft:stone_depth",
+          "offset": 0,
+          "surface_type": "ceiling",
+          "add_surface_depth": false,
+          "secondary_depth_range": 0
+        },
+        "then_run": {
+          "type": "minecraft:sequence",
+          "sequence": [
+            {
+              "type": "minecraft:condition",
+              "if_true": {
+                "type": "minecraft:noise_threshold",
+                "noise": "minecraft:surface_secondary",
+                "min_threshold": 0.5,
+                "max_threshold": 2.0,
+                "is_3d": false
+              },
+              "then_run": {
+                "type": "minecraft:block",
+                "result_state": {
+                  "Name": "minecraft:glowstone"
+                }
+              }
+            },
+            {
+              "type": "minecraft:block",
+              "result_state": {
+                "Name": "minecraft:sandstone"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "minecraft:condition",
+        "if_true": {
+          "type": "minecraft:stone_depth",
+          "offset": 6,
+          "surface_type": "ceiling",
+          "add_surface_depth": true,
+          "secondary_depth_range": 0
+        },
+        "then_run": {
+          "type": "minecraft:block",
+          "result_state": {
+            "Name": "minecraft:smooth_sandstone"
+          }
+        }
+      }
+    ]
+  }
+}

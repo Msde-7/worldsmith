@@ -1,0 +1,14 @@
+{
+  "pack": {
+    "pack_format": 107,
+    "description": "Yellow sky islands",
+    "min_format": [
+      107,
+      0
+    ],
+    "max_format": [
+      107,
+      99
+    ]
+  }
+}

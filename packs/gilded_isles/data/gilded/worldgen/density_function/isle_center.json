@@ -1,0 +1,52 @@
+{
+  "type": "minecraft:add",
+  "argument1": {
+    "type": "minecraft:flat_cache",
+    "argument": {
+      "type": "minecraft:cache_2d",
+      "argument": {
+        "type": "minecraft:spline",
+        "spline": {
+          "coordinate": "gilded:altitude_noise",
+          "points": [
+            {
+              "location": -1.0,
+              "value": 78.0,
+              "derivative": 0.0
+            },
+            {
+              "location": -0.55,
+              "value": 96.0,
+              "derivative": 0.0
+            },
+            {
+              "location": -0.15,
+              "value": 116.0,
+              "derivative": 0.0
+            },
+            {
+              "location": 0.25,
+              "value": 142.0,
+              "derivative": 0.0
+            },
+            {
+              "location": 0.6,
+              "value": 166.0,
+              "derivative": 0.0
+            },
+            {
+              "location": 1.0,
+              "value": 192.0,
+              "derivative": 0.0
+            }
+          ]
+        }
+      }
+    }
+  },
+  "argument2": {
+    "type": "minecraft:mul",
+    "argument1": 46.0,
+    "argument2": "gilded:tier_noise"
+  }
+}

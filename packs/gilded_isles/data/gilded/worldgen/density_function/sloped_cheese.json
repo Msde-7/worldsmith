@@ -1,0 +1,20 @@
+{
+  "type": "minecraft:add",
+  "argument1": {
+    "type": "minecraft:mul",
+    "argument1": 4.0,
+    "argument2": {
+      "type": "minecraft:quarter_negative",
+      "argument": {
+        "type": "minecraft:mul",
+        "argument1": "gilded:shaped_depth",
+        "argument2": "gilded:factor"
+      }
+    }
+  },
+  "argument2": {
+    "type": "minecraft:mul",
+    "argument1": 1.75,
+    "argument2": "gilded:base_3d_noise"
+  }
+}

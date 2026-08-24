@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "mesas:ember_downs",
+    "mesas:banded_ridges",
+    "mesas:layered_mesa",
+    "mesas:amber_thicket",
+    "mesas:still_hollow",
+    "mesas:bleached_dunes",
+    "mesas:ochre_shore"
+  ]
+}

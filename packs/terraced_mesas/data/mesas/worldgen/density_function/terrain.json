@@ -1,0 +1,5 @@
+{
+  "type": "minecraft:add",
+  "argument1": "mesas:sloped_cheese",
+  "argument2": "mesas:slides"
+}

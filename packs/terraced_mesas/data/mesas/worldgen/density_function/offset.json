@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:add",
+  "argument1": "mesas:base_offset",
+  "argument2": {
+    "type": "minecraft:mul",
+    "argument1": "mesas:land_mask",
+    "argument2": {
+      "type": "minecraft:add",
+      "argument1": "mesas:relief",
+      "argument2": {
+        "type": "minecraft:mul",
+        "argument1": "mesas:mesa_mask",
+        "argument2": "mesas:terrace"
+      }
+    }
+  }
+}

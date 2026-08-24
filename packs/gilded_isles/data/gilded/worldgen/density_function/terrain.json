@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:add",
+  "argument1": {
+    "type": "minecraft:max",
+    "argument1": "gilded:sloped_cheese",
+    "argument2": "gilded:shard_cheese"
+  },
+  "argument2": "gilded:top_slide"
+}

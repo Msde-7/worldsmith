@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "gilded:sunlit_meadow",
+    "gilded:goldenrod_grove",
+    "gilded:amber_dunes",
+    "gilded:citrine_bluffs",
+    "gilded:honeyfall_hollow",
+    "gilded:brimstone_shoals",
+    "gilded:sunspire_reach"
+  ]
+}

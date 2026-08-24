@@ -1,0 +1,49 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:spline",
+      "spline": {
+        "coordinate": "mesas:continents",
+        "points": [
+          {
+            "location": -1.2,
+            "value": -0.88,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.455,
+            "value": -0.75,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.19,
+            "value": -0.62,
+            "derivative": 0.0
+          },
+          {
+            "location": -0.13,
+            "value": -0.5,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.03,
+            "value": -0.42,
+            "derivative": 0.0
+          },
+          {
+            "location": 0.3,
+            "value": -0.31,
+            "derivative": 0.0
+          },
+          {
+            "location": 1.2,
+            "value": -0.14,
+            "derivative": 0.0
+          }
+        ]
+      }
+    }
+  }
+}

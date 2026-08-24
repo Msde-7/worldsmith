@@ -1,0 +1,14 @@
+{
+  "pack": {
+    "pack_format": 107,
+    "description": "Terraced mesas banded into strata, over fuzzy orange downs",
+    "min_format": [
+      107,
+      0
+    ],
+    "max_format": [
+      107,
+      99
+    ]
+  }
+}
