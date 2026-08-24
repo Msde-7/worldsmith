@@ -23,7 +23,7 @@ from .reference import reference_text
 from .registry import Registries
 from .render import contact_sheet, render_biomes, render_height, render_map, render_section
 from .scene import build_scene
-from .terrain import sample_terrain
+from .terrain import cell_interpolated, sample_terrain
 from .validate import ERROR, INFO, WARNING, Validator
 from .world import World
 
@@ -211,6 +211,11 @@ def cmd_column(args):
     node = world.router["final_density"]
     prepare(node)
     ys = terrain.y_levels
+    if not cell_interpolated(node):
+        # caves are cut in below the interpolation, so they sit between the
+        # lattice rows: a cave roof falls straight through an 8-block step.
+        ys = np.arange(world.noise.min_y, world.noise.max_y + 1)
+        print("  every block (density is not linear in y between lattice rows)")
     ctx = Ctx(np.array([[float(x)]]), ys[:, None].astype(float), np.array([[float(z)]]))
     density = np.ravel(np.broadcast_to(np.asarray(node.eval(ctx), float), (len(ys), 1)))
     for y, d in zip(ys[::-1], density[::-1]):
