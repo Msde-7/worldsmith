@@ -386,6 +386,10 @@ def test_grass_tint_and_block_colours():
                          .read_text(encoding="utf-8"))["blocks"])
     unknown = sorted(k for k in BLOCK_COLORS if f"minecraft:{k}" not in ids)
     check("every block colour names a real block", not unknown, str(unknown))
+    # and the other way: a short extraction would send whole biomes magenta
+    uncoloured = sorted(b for b in ids if b.split(":")[-1] not in BLOCK_COLORS)
+    check("every block has a colour", not uncoloured,
+          f"{len(uncoloured)} without one: {uncoloured[:8]}")
 
     tinted, plain = (0x2B, 0x8C, 0xD9), None       # a blue no colormap would produce
     tmp = tempfile.mkdtemp(prefix="worldsmith-tint-")

@@ -1,90 +1,58 @@
-"""Approximate top-face colours for the blocks worldgen actually places.
+"""Top-face colours for every block, so the preview can draw what the game draws.
 
-These are average texture colours, good enough to read terrain at a glance.
-Unknown blocks render magenta on purpose: a magenta patch means the pack asked
-for a block this table has never heard of, which is usually a typo.
+The values are averages of the real block textures, pulled out of the client jar
+by tools/extract_block_colors.py and vendored as
+vanilla/<version>/block_colors.json. They used to be typed out by hand, which
+meant the table lagged behind the blocks packs actually reach for and anything
+missing rendered magenta.
+
+A handful of blocks are still set here, because the jar's texture is not what
+you see in game: water and foliage are stored greyscale and tinted at runtime,
+glowstone is lit far brighter than its texture, and air has no texture at all.
+
+Unknown blocks still render magenta on purpose: a magenta patch means the pack
+asked for a block that does not exist, which is usually a typo.
 """
 from __future__ import annotations
 
 import colorsys
+import json
+from pathlib import Path
 
 import numpy as np
 
+from .registry import DEFAULT_VERSION, VANILLA_ROOT
+
 MISSING = (255, 0, 220)
 
+
+def _extracted(version: str = DEFAULT_VERSION) -> dict[str, tuple[int, int, int]]:
+    path = VANILLA_ROOT / version / "block_colors.json"
+    if not path.is_file():                    # not extracted yet for this version
+        return {}
+    return {name: tuple(rgb) for name, rgb in
+            json.loads(path.read_text(encoding="utf-8")).items()}
+
+
+# Greyscale in the jar; the game multiplies in a biome tint, and these are what
+# that tint looks like at its most ordinary.
+_TINTED = {
+    "water": (57, 87, 176),
+    "grass_block": (127, 178, 56), "short_grass": (127, 178, 56),
+    "tall_grass": (127, 178, 56), "fern": (127, 178, 56), "large_fern": (127, 178, 56),
+    "oak_leaves": (86, 130, 51), "jungle_leaves": (86, 130, 51),
+    "acacia_leaves": (86, 130, 51), "dark_oak_leaves": (86, 130, 51),
+    "mangrove_leaves": (86, 130, 51), "vine": (86, 130, 51),
+    "lily_pad": (86, 130, 51), "sugar_cane": (128, 180, 80),
+}
+
 BLOCK_COLORS: dict[str, tuple[int, int, int]] = {
-    # stone family
-    "stone": (125, 125, 125), "deepslate": (77, 77, 80), "cobblestone": (127, 127, 127),
-    "andesite": (136, 136, 137), "diorite": (188, 188, 189), "granite": (149, 103, 85),
-    "tuff": (108, 109, 102), "calcite": (223, 222, 217), "dripstone_block": (134, 107, 92),
-    "smooth_basalt": (72, 72, 80), "basalt": (80, 78, 84), "blackstone": (42, 35, 41),
-    "obsidian": (21, 18, 30), "bedrock": (85, 85, 85), "gravel": (131, 127, 126),
-    "netherrack": (114, 58, 57), "end_stone": (221, 223, 165), "amethyst_block": (134, 97, 197),
-    "magma_block": (142, 63, 31), "sculk": (14, 28, 35),
-    # dirt family
-    "dirt": (134, 96, 67), "coarse_dirt": (119, 85, 59), "rooted_dirt": (144, 103, 76),
-    "grass_block": (127, 178, 56), "podzol": (91, 61, 26), "mycelium": (111, 99, 100),
-    "mud": (60, 55, 60), "clay": (160, 166, 179), "moss_block": (89, 109, 45),
-    "farmland": (98, 66, 41), "dirt_path": (148, 122, 66),
-    # sand / sandstone
-    "sand": (219, 207, 163), "red_sand": (190, 102, 33), "sandstone": (216, 203, 155),
-    "red_sandstone": (190, 102, 33), "soul_sand": (81, 62, 50), "soul_soil": (75, 57, 46),
-    "smooth_sandstone": (223, 214, 170), "cut_sandstone": (219, 208, 165),
-    "chiseled_sandstone": (216, 204, 158),
-    # snow / ice
-    "snow_block": (249, 254, 254), "snow": (249, 254, 254), "powder_snow": (249, 254, 254),
-    "ice": (145, 183, 253), "packed_ice": (141, 180, 250), "blue_ice": (116, 167, 253),
-    # liquids
-    "water": (57, 87, 176), "lava": (217, 104, 24),
-    # nether / end vegetation blocks
-    "crimson_nylium": (130, 31, 31), "warped_nylium": (22, 119, 105),
-    "nether_wart_block": (114, 3, 3), "warped_wart_block": (20, 89, 89),
-    "shroomlight": (241, 154, 76), "glowstone": (248, 215, 115),
-    # terracotta bands
-    "terracotta": (152, 94, 68), "white_terracotta": (209, 178, 161),
-    "orange_terracotta": (161, 83, 37), "magenta_terracotta": (149, 88, 108),
-    "light_blue_terracotta": (113, 108, 137), "yellow_terracotta": (186, 133, 35),
-    "lime_terracotta": (103, 117, 52), "pink_terracotta": (161, 78, 78),
-    "gray_terracotta": (57, 42, 35), "light_gray_terracotta": (135, 107, 98),
-    "cyan_terracotta": (86, 91, 91), "purple_terracotta": (118, 70, 86),
-    "blue_terracotta": (74, 59, 91), "brown_terracotta": (77, 51, 35),
-    "green_terracotta": (76, 83, 42), "red_terracotta": (143, 61, 46),
-    "black_terracotta": (37, 22, 16),
-    # concrete / wool (packs love these for stylised terrain)
-    "white_concrete": (207, 213, 214), "orange_concrete": (224, 97, 0),
-    "magenta_concrete": (169, 48, 159), "light_blue_concrete": (35, 137, 198),
-    "yellow_concrete": (240, 175, 21), "lime_concrete": (94, 168, 24),
-    "pink_concrete": (213, 101, 142), "gray_concrete": (54, 57, 61),
-    "light_gray_concrete": (125, 125, 115), "cyan_concrete": (21, 119, 136),
-    "purple_concrete": (100, 31, 156), "blue_concrete": (44, 46, 143),
-    "brown_concrete": (96, 59, 31), "green_concrete": (73, 91, 36),
-    "red_concrete": (142, 32, 32), "black_concrete": (8, 10, 15),
-    "white_wool": (233, 236, 236), "black_wool": (20, 21, 25),
-    # ores and metal blocks
-    "coal_block": (16, 15, 15), "iron_block": (220, 220, 220), "gold_block": (246, 208, 61),
-    "diamond_block": (98, 219, 214), "emerald_block": (42, 203, 87), "copper_block": (192, 107, 79),
-    "redstone_block": (171, 25, 6), "lapis_block": (30, 67, 140), "netherite_block": (66, 60, 62),
-    "quartz_block": (235, 229, 222), "prismarine": (99, 156, 151),
-    "raw_iron_block": (166, 135, 107), "raw_copper_block": (154, 91, 67), "raw_gold_block": (221, 169, 46),
-    # misc
-    "air": (0, 0, 0), "cave_air": (0, 0, 0), "glass": (200, 220, 235),
-    "honey_block": (251, 184, 48), "slime_block": (111, 192, 91),
-    "honeycomb_block": (229, 148, 30),
-    "bone_block": (229, 225, 206), "ochre_froglight": (250, 240, 195),
-    "verdant_froglight": (218, 235, 205), "pearlescent_froglight": (243, 220, 232),
-    "mossy_cobblestone": (110, 118, 95), "cobbled_deepslate": (77, 77, 80),
-    "smooth_stone": (159, 159, 159), "stone_bricks": (122, 121, 122),
-    "polished_blackstone": (53, 48, 56), "gilded_blackstone": (69, 44, 39),
-    "crying_obsidian": (32, 10, 60), "ancient_debris": (94, 66, 60),
-    "sulfur": (214, 197, 84), "cinnabar": (166, 63, 52),
-    # stylised-terrain blocks packs reach for that were not yet listed
-    "smooth_red_sandstone": (181, 97, 31), "cut_red_sandstone": (184, 99, 33),
-    "chiseled_red_sandstone": (181, 97, 31), "packed_mud": (142, 106, 79),
-    "mud_bricks": (137, 102, 78), "muddy_mangrove_roots": (70, 51, 39),
-    "hay_block": (166, 138, 21), "dried_kelp_block": (49, 61, 43),
-    "orange_wool": (240, 118, 19), "orange_concrete_powder": (227, 132, 32),
-    "exposed_copper": (161, 125, 100), "weathered_copper": (108, 153, 122),
-    "red_mushroom_block": (203, 46, 43), "brown_mushroom_block": (149, 111, 79),
+    **_extracted(),
+    **_TINTED,
+    # lit far brighter than the texture it is drawn from
+    "glowstone": (248, 215, 115),
+    # no texture to average
+    "air": (0, 0, 0), "cave_air": (0, 0, 0), "void_air": (0, 0, 0),
 }
 
 # grass tint anchors sampled from vanilla's grass colormap: (temperature, downfall) -> rgb

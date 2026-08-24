@@ -166,7 +166,7 @@ the mandatory router fields, and biome boxes that can never win.
 | `worldsmith/render.py` | the four views and the contact sheet |
 | `worldsmith/play.py` | server runtime, spawn picking, world install |
 | `vanilla/26.2/` | the vendored vanilla data it is checked against |
-| `tools/` | in-game verification, the deepslate oracle, the two authoring scripts |
+| `tools/` | in-game verification, the deepslate oracle, block-colour extraction, the two authoring scripts |
 
 Renders are fast because every purely 2D function is evaluated once per column
 rather than once per block, the Perlin inner loop is a parallel numba kernel, and
@@ -194,8 +194,9 @@ Vanilla itself, rendered by the engine:
 ## Tests
 
 ```bash
-python tests/run_all.py                              # 221 checks, no network
+python tests/run_all.py                              # 264 checks, no network
 python tools/verify_in_game.py packs/basalt_spires   # the real game, opt-in
+python tools/extract_block_colors.py                 # re-read block colours from the client jar
 ```
 
 The second downloads a server jar and Java runtime into `.runtime/` on first use
