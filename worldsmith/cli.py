@@ -77,9 +77,13 @@ def cmd_new(args):
     root = Path(args.directory)
     if root.exists() and any(root.iterdir()) and not args.force:
         raise SystemExit(f"{root} is not empty (use --force to overwrite)")
-    writer = scaffold(root, args.namespace, args.name, template=args.template,
-                      description=args.description, version=args.version,
-                      replace_overworld=args.replace_overworld)
+    try:
+        writer = scaffold(root, args.namespace, args.name, template=args.template,
+                          description=args.description, version=args.version,
+                          replace_overworld=args.replace_overworld,
+                          caves=args.caves, like=args.like)
+    except ValueError as exc:            # unknown template or --like biome
+        raise SystemExit(str(exc))
     print(f"created {root} ({len(writer.written)} files)")
     for rel in writer.relative():
         print("  ", rel)
@@ -327,6 +331,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", default="26.2")
     p.add_argument("--replace-overworld", action="store_true",
                    help="also write data/minecraft/dimension/overworld.json so new worlds use this terrain")
+    p.add_argument("--caves", action="store_true",
+                   help="cut vanilla's cave functions into the terrain, and turn on the "
+                        "aquifers that keep them from flooding (the preview shows them; "
+                        "renders take the slower exact scan)")
+    p.add_argument("--like", metavar="BIOME",
+                   help="borrow the trees, ores, mobs and carvers of a vanilla biome, "
+                        "e.g. minecraft:plains (the game places them; the preview does not)")
     p.add_argument("--force", action="store_true")
     p.set_defaults(func=cmd_new)
 

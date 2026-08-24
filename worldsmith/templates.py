@@ -16,6 +16,28 @@ from __future__ import annotations
 
 PACK_FORMAT = {"26.2": 107, "26.1": 105, "1.21.11": 88, "1.21.8": 71, "1.21.4": 57, "1.21": 41}
 
+# Vanilla's caves are density functions, not carvers, so a pack that borrows
+# them gets caves the renderer draws exactly. `entrances` brings the spaghetti
+# layer with it; `noodle` is the thin winding sort.
+CAVE_ENTRANCES = "minecraft:overworld/caves/entrances"
+CAVE_NOODLE = "minecraft:overworld/caves/noodle"
+
+# Caves need aquifers or they flood: with these fields left at 0 the game fills
+# every cavity below sea level with water and everything under y=-54 with lava.
+# These are vanilla's own four, and the noises they name are vanilla's too.
+AQUIFER_ROUTER = {
+    "barrier": {"type": "minecraft:noise", "noise": "minecraft:aquifer_barrier",
+                "xz_scale": 1.0, "y_scale": 0.5},
+    "fluid_level_floodedness": {"type": "minecraft:noise",
+                                "noise": "minecraft:aquifer_fluid_level_floodedness",
+                                "xz_scale": 1.0, "y_scale": 0.67},
+    "fluid_level_spread": {"type": "minecraft:noise",
+                           "noise": "minecraft:aquifer_fluid_level_spread",
+                           "xz_scale": 1.0, "y_scale": 0.7142857142857143},
+    "lava": {"type": "minecraft:noise", "noise": "minecraft:aquifer_lava",
+             "xz_scale": 1.0, "y_scale": 1.0},
+}
+
 
 # The JSON these helpers build is shared with the authoring scripts in tools/.
 
@@ -40,11 +62,39 @@ def shifted_noise(noise, xz_scale=0.25):
     })
 
 
-def base_router(ns: str, *, min_y: int, height: int) -> dict:
+def with_caves(final_density: dict) -> dict:
+    """Cut vanilla's caves into a final_density, the way vanilla cuts them.
+
+    The entrance and spaghetti layer goes inside the interpolation so the walls
+    come out smooth; noodles are applied outside it, at block resolution.
+
+    The caller has to hand over the `interpolated` node itself. Cutting the
+    entrances into anything wrapped around it builds a pack the game still
+    loads and still fills with caves, only in the wrong places: that shape
+    matched a real server on 87% of columns against 100% for this one.
+
+    The functions carry vanilla's own altitudes: `noodle` is gated to y -60..321
+    and `entrances` ramps between y -10 and 30, so a pack that moves `min_y` or
+    `height` keeps its caves at vanilla's heights. Caves also want aquifers
+    (`AQUIFER_ROUTER`): without them the game floods every cavity below sea
+    level, which measured 5% dry cave volume against 91% with them.
+    """
+    if final_density.get("type") != "minecraft:interpolated":
+        raise ValueError("with_caves needs the minecraft:interpolated node, got "
+                         f"{final_density.get('type')!r}")
+    carved = dict(final_density)
+    carved["argument"] = {"type": "minecraft:min",
+                          "argument1": final_density["argument"],
+                          "argument2": CAVE_ENTRANCES}
+    return {"type": "minecraft:min", "argument1": carved, "argument2": CAVE_NOODLE}
+
+
+def base_router(ns: str, *, min_y: int, height: int, caves: bool = False,
+                aquifers: bool = False) -> dict:
     """The 15 router fields. Aquifers and ore veins are off, so their fields are
     constant 0, but they must still be present or the file is rejected."""
     top = min_y + height
-    return {
+    router = {
         "barrier": 0.0,
         "fluid_level_floodedness": 0.0,
         "fluid_level_spread": 0.0,
@@ -93,6 +143,11 @@ def base_router(ns: str, *, min_y: int, height: int) -> dict:
         "vein_ridged": 0.0,
         "vein_gap": 0.0,
     }
+    if aquifers:
+        router.update(AQUIFER_ROUTER)
+    if caves:
+        router["final_density"] = with_caves(router["final_density"])
+    return router
 
 
 def base_density_functions(ns: str, *, min_y: int, height: int,
@@ -221,7 +276,7 @@ def surface_rule_simple(top_block: str, mid_block: str, deep_block: str,
 
 def biome_json(temperature: float, downfall: float, *, water_color="#3f76e4",
                sky_color="#78a7ff", fog_color=None, water_fog_color=None,
-               foliage=None, grass=None) -> dict:
+               foliage=None, grass=None, decoration=None) -> dict:
     """26.2 shape: `effects` carries colours only; sky/fog moved to `attributes`."""
     effects = {"water_color": water_color}
     if foliage:
@@ -245,6 +300,10 @@ def biome_json(temperature: float, downfall: float, *, water_color="#3f76e4",
         "carvers": [],
         "features": [[], [], [], [], [], [], [], [], [], [], []],
     }
+    # trees, ores, mobs and carver tunnels, borrowed wholesale from a vanilla
+    # biome. The game places all of these; the preview draws none of them.
+    if decoration:
+        biome.update(decoration)
     if attributes:
         biome["attributes"] = attributes
     return biome
@@ -267,7 +326,7 @@ def biome_entry(biome: str, *, temperature=(-1.0, 1.0), humidity=(-1.0, 1.0),
 # Templates
 # ---------------------------------------------------------------------------
 
-def template_basic(ns: str, name: str) -> dict:
+def template_basic(ns: str, name: str, *, caves: bool = False, decoration=None) -> dict:
     """Continents and oceans: the readable skeleton to edit."""
     min_y, height, sea = -64, 384, 63
     # depth = (1.5 - (y - min_y) * 3 / height) + offset, so the ground sits where
@@ -298,17 +357,18 @@ def template_basic(ns: str, name: str) -> dict:
                                                    jagged_points=jagged_points),
         "noise_settings": {f"{ns}:{name}": {
             "sea_level": sea, "disable_mob_generation": False,
-            "aquifers_enabled": False, "ore_veins_enabled": False,
+            "aquifers_enabled": caves, "ore_veins_enabled": False,
             "legacy_random_source": False,
             "default_block": {"Name": "minecraft:stone"},
             "default_fluid": {"Name": "minecraft:water", "Properties": {"level": "0"}},
             "noise": {"min_y": min_y, "height": height, "size_horizontal": 1, "size_vertical": 2},
             "spawn_target": [],
-            "noise_router": base_router(ns, min_y=min_y, height=height),
+            "noise_router": base_router(ns, min_y=min_y, height=height, caves=caves,
+                                        aquifers=caves),
             "surface_rule": surface_rule_simple("minecraft:grass_block", "minecraft:dirt",
                                                 "minecraft:deepslate", "minecraft:gravel"),
         }},
-        "biome": {f"{ns}:plains_like": biome_json(0.8, 0.4)},
+        "biome": {f"{ns}:plains_like": biome_json(0.8, 0.4, decoration=decoration)},
         "dimension": {},
     }
     files["dimension"][f"{ns}:{name}"] = {

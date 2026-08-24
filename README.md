@@ -105,7 +105,7 @@ out to be edited (`renders/starter.png`).
 ## Commands
 
 ```bash
-worldsmith new     packs/mine --namespace mine --name mine
+worldsmith new     packs/mine --namespace mine --name mine [--caves] [--like minecraft:plains]
 worldsmith check   packs/mine        # schema, dangling refs, dead biomes, smoke test
 worldsmith render  packs/mine --out renders/mine.png
 worldsmith play    packs/mine        # into Minecraft
@@ -114,6 +114,35 @@ worldsmith reference terrain         # the height formula and what every knob do
 worldsmith probe   packs/mine --at 100 64 -200 --density mine:offset mine:factor
 worldsmith column  packs/mine --at 100 -200      # one column, top to bottom
 ```
+
+`--caves` cuts vanilla's cave system into the terrain. Vanilla's caves are density
+functions rather than carvers, so these are the one kind of cave the preview draws
+exactly. They have to go inside the `interpolated` node the way vanilla does it: a
+world that cut them in outside that node matched the game on 87% of columns against
+100% for the shape vanilla uses, which is the sort of thing you only find by
+generating both, with aquifers off on both sides so only the placement differed.
+
+`--caves` turns aquifers on with them, and writes the four aquifer router fields
+that make that mean anything. Caves without aquifers flood: the game has no water
+table to consult, so it fills every cavity below sea level with water and everything
+under y=-54 with lava, and on a 400 column sample only 5% of the cave volume came
+out as air against 91% with aquifers on. Two consequences worth knowing. Such a pack
+renders on the exact per-block scan, roughly 5x slower, because a cave layer makes
+`final_density` a `min` and the density is then no longer linear in y. And the cave
+functions carry vanilla's own altitudes (`noodle` is gated to y -60..321, `entrances`
+ramps between y -10 and 30), so a pack that moves `min_y` or `height` keeps its caves
+where vanilla put them.
+
+Aquifers are also the one part of the engine that is not exact, so a cave pack
+previews a little less precisely than a plain one. Against a real server over
+331,776 columns, `--caves` came out 99.441% exact and 99.724% within one block, mean
+error 0.017 blocks. The columns it misses are the ones where the game perches a body
+of water or drops a barrier lid over a cavity and the engine puts it a few blocks
+off. A plain pack has no aquifers and stays exact.
+
+`--like minecraft:plains` borrows a vanilla biome's trees, ores, mobs and carvers.
+These are features and carvers, not density functions, so the game places them after
+generation and a render never shows them.
 
 Run them as `python -m worldsmith.cli <command>` from the repository. `check` is
 the one to run before every render: Minecraft rejects malformed worldgen silently
@@ -151,8 +180,9 @@ else, vanilla included, falls back to an exact per-block scan.
   between them are modelled, but where the game's floodedness check is a near
   tie the engine can pick the other side, which is the last 0.04% of columns.
   Most custom packs leave `aquifers_enabled` off and are unaffected.
-* **Carvers and features are not run.** No caves, trees or ores. The preview is
-  bare worldgen terrain, which is what you are editing.
+* **Carvers and features are not run**, so the trees, ores and ravines `--like`
+  brings along are placed by the game afterwards and never show up in a render.
+  Noise caves are the exception, since they live in the density functions.
 * **Vanilla's biome presets cannot be previewed.** `{"preset": "minecraft:overworld"}`
   resolves in Java code rather than in data, so such a dimension renders with
   terrain only. Custom packs list their biomes and preview fine.

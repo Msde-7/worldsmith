@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import worldsmith.noise as noise_mod
 from worldsmith.climate import BiomeSource, unreachable_biomes
-from worldsmith.density import prepare
+from worldsmith.density import Ctx, prepare
 from worldsmith.pack import scaffold
 from worldsmith.registry import Registries
 from worldsmith.terrain import base_height, cell_interpolated, sample_terrain
@@ -233,6 +233,70 @@ def test_aquifer_barrier():
                            "spires:basalt_spires", 1).aquifers_enabled)
 
 
+def test_caves_and_decoration():
+    """`new --caves` has to actually carve, and it has to carve where vanilla does.
+
+    Cutting the cave layer in outside the `interpolated` node looks equivalent
+    and is not: a world built that way matched the real game on 87% of columns,
+    against 100% for the shape vanilla uses, aquifers off on both sides.
+    """
+    from worldsmith.pack import decoration_of
+    from worldsmith.templates import (AQUIFER_ROUTER, CAVE_ENTRANCES, CAVE_NOODLE,
+                                      with_caves)
+
+    tmp = tempfile.mkdtemp(prefix="worldsmith-caves-")
+    try:
+        root = Path(tmp) / "caves"
+        scaffold(root, "caves", "caves", caves=True, like="minecraft:plains")
+        _, findings = validate_path(root)
+        check("a caves pack validates", not [f for f in findings if f.level == ERROR],
+              "; ".join(f.format() for f in findings if f.level == ERROR))
+
+        settings = json.loads((root / "data/caves/worldgen/noise_settings/caves.json")
+                              .read_text(encoding="utf-8"))
+        final = settings["noise_router"]["final_density"]
+        check("noodles are cut outside the interpolation", final["argument2"] == CAVE_NOODLE)
+        check("the cave layer is cut inside the interpolation, as vanilla does",
+              final["argument1"]["type"] == "minecraft:interpolated"
+              and final["argument1"]["argument"]["argument2"] == CAVE_ENTRANCES)
+        try:
+            with_caves({"type": "minecraft:squeeze", "argument": {}})
+            wrong_node = False
+        except ValueError:
+            wrong_node = True
+        check("carving anything but the interpolated node is refused", wrong_node)
+
+        # caves without aquifers flood: 5% of the cave volume stays air, against
+        # 91% with them. Turning the flag on and leaving the four router fields
+        # at 0 is the other half of the trap, and gives sheets of water instead.
+        check("caves bring aquifers with them", settings["aquifers_enabled"])
+        check("and the four aquifer router fields are actually written",
+              all(settings["noise_router"][f] == AQUIFER_ROUTER[f] for f in AQUIFER_ROUTER))
+
+        biome = json.loads((root / "data/caves/worldgen/biome/plains_like.json")
+                           .read_text(encoding="utf-8"))
+        check("--like brings the trees and mobs along",
+              bool(biome["carvers"]) and any(biome["features"]) and bool(biome["spawners"]))
+
+        world = World.create(Registries.load([str(root)]), "caves:caves", 12345)
+        node = world.router["final_density"]
+        prepare(node)
+        ys = np.arange(-30.0, 60.0)
+        found = False
+        for x, z in ((-291.0, -288.0), (100.0, 40.0), (-40.0, 220.0)):
+            ctx = Ctx(np.array([[x]]), ys[:, None], np.array([[z]]))
+            solid = np.ravel(np.broadcast_to(np.asarray(node.eval(ctx), float),
+                                             (len(ys), 1))) > 0
+            found |= any(not solid[i] and solid[i - 2] and solid[i + 2]
+                         for i in range(2, len(ys) - 2))
+        check("the caves are actually hollow", found)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    check("decoration comes from the biome asked for",
+          decoration_of("minecraft:desert")["carvers"] != [])
+
+
 def test_platform_paths():
     """`play` has to find the right runtime, saves folder and launcher on each OS."""
     import platform
@@ -271,6 +335,7 @@ def main():
     test_packs_generate()
     test_aquifer_levels()
     test_aquifer_barrier()
+    test_caves_and_decoration()
     test_platform_paths()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:

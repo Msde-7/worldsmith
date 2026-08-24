@@ -15,6 +15,8 @@ Run every command from the root of the worldsmith checkout.
 
 ```
 python -m worldsmith.cli new packs/<name> --namespace <ns> --name <name>
+#   --caves                  cut vanilla's cave system into the terrain
+#   --like minecraft:plains  borrow a vanilla biome's trees, ores, mobs, carvers
 # edit the JSON
 python -m worldsmith.cli check  packs/<name>
 python -m worldsmith.cli render packs/<name> --out renders/<name>.png
@@ -96,6 +98,38 @@ spline that forgets the -0.5 builds the world at cloud height.
 | more / less ocean | move the ocean end of the `offset` spline |
 | different rock, sand, snow | the `surface_rule` |
 | different biomes | the `biome_source` parameter boxes |
+| caves | `--caves`, or min the cave functions in yourself (see below) |
+| trees, ores, mobs | `--like <vanilla biome>`; the game places them, the render never shows them |
+
+Caves belong **inside** the `interpolated` node, the way vanilla does it:
+
+```
+final_density = min(interpolated(min(<terrain>, minecraft:overworld/caves/entrances)),
+                    minecraft:overworld/caves/noodle)
+```
+
+Cutting them in outside that node looks equivalent and is not. A world built that
+way matched the real game on 87% of columns; the shape above matched on 100%. Both
+sides of that test had aquifers off, so only the placement differed.
+
+Caves need aquifers, so `--caves` turns them on and writes the four aquifer
+router fields (`barrier`, `fluid_level_floodedness`, `fluid_level_spread`, `lava`)
+with vanilla's noises. Skip that and the caves flood: the game fills every cavity
+below sea level with water and below y=-54 with lava, which measured 5% dry cave
+volume against 91% with aquifers on. Flipping `aquifers_enabled` while leaving
+those four fields at 0 is its own bug, and gives flat sheets of water underground.
+
+Two more things that catch people out with `--caves`:
+
+* the pack renders about 5x slower. `final_density` becomes a `min`, so it is no
+  longer linear in y and `render`, `check` and `column` all take the exact
+  per-block scan instead of the lattice shortcut.
+* the cave functions carry vanilla's altitudes (`noodle` gated to y -60..321,
+  `entrances` ramping y -10..30). Move `min_y` or `height` and the caves stay put.
+* the preview stops being exact, because aquifers are the one part of the engine
+  that approximates. A `--caves` pack measured 99.441% exact against a real server
+  over 331,776 columns (99.724% within one block); the misses are columns where the
+  game perches water or drops a barrier lid a few blocks off where the engine put it.
 
 `firstOctave` is a power of two: -7 gives ~128-block features, -5 gives ~32-block
 features. Less negative = smaller, tighter features.
