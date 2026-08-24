@@ -273,16 +273,28 @@ def finish_level_dat(level_dat: Path, name: str) -> None:
     level_dat.write_bytes(gzip.compress(raw))
 
 
+def server_properties(seed: int, gamemode: str) -> str:
+    """Settings for the throwaway server that builds the world.
+
+    `generate-structures` must be on. The server bakes it into the world at
+    creation as generate_features, so a world built with it off has no village,
+    temple, monument or stronghold in it and never will, whatever the pack's
+    biome tags say. tools/verify_in_game.py deliberately turns it off instead:
+    structures reshape the ground, which would wreck a heightmap comparison.
+    """
+    return "\n".join([
+        f"level-seed={seed}", "level-name=world", "online-mode=false", "max-tick-time=-1",
+        "sync-chunk-writes=true", f"gamemode={gamemode}", "difficulty=peaceful",
+        "generate-structures=true", "spawn-protection=0", "view-distance=10",
+        "simulation-distance=4", "allow-nether=false", "",
+    ])
+
+
 def generate_world(runtime: Runtime, work: Path, pack: Path, seed: int,
                    spawn: Viewpoint, radius: int, gamemode: str, pregen_seconds: int) -> Path:
     work.mkdir(parents=True, exist_ok=True)
     (work / "eula.txt").write_text("eula=true\n", encoding="utf-8")
-    (work / "server.properties").write_text("\n".join([
-        f"level-seed={seed}", "level-name=world", "online-mode=false", "max-tick-time=-1",
-        "sync-chunk-writes=true", f"gamemode={gamemode}", "difficulty=peaceful",
-        "generate-structures=false", "spawn-protection=0", "view-distance=10",
-        "simulation-distance=4", "allow-nether=false", "",
-    ]), encoding="utf-8")
+    (work / "server.properties").write_text(server_properties(seed, gamemode), encoding="utf-8")
     datapacks = work / "world" / "datapacks"
     datapacks.mkdir(parents=True, exist_ok=True)
     target = datapacks / pack.name

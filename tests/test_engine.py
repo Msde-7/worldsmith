@@ -364,6 +364,24 @@ def test_caves_and_decoration():
           decoration_of("minecraft:desert")["carvers"] != [])
 
 
+def test_play_generates_structures():
+    """`play` must ask the server for structures.
+
+    The server bakes generate-structures into the world at creation, so a world
+    built with it off has no village, temple or monument in it and never will,
+    however correct the pack's biome tags are. This was off once: a 17,897-chunk
+    world generated 0 structures; with it on, 8,100 chunks generated 66.
+    """
+    from worldsmith.play import server_properties
+
+    props = server_properties(seed=7, gamemode="creative")
+    lines = dict(line.split("=", 1) for line in props.splitlines() if "=" in line)
+    check("play turns structure generation on", lines.get("generate-structures") == "true",
+          str(lines.get("generate-structures")))
+    check("play passes the seed through", lines.get("level-seed") == "7", str(lines))
+    check("play passes the gamemode through", lines.get("gamemode") == "creative", str(lines))
+
+
 def test_platform_paths():
     """`play` has to find the right runtime, saves folder and launcher on each OS."""
     import platform
@@ -404,6 +422,7 @@ def main():
     test_aquifer_levels()
     test_aquifer_barrier()
     test_caves_and_decoration()
+    test_play_generates_structures()
     test_platform_paths()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
