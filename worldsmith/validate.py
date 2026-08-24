@@ -85,6 +85,8 @@ class Validator:
             self.check_dimension(ident, obj)
         for ident, obj in scope.get("biome", {}).items():
             self.check_biome(ident, obj)
+        for ident, obj in scope.get("biome_tag", {}).items():
+            self.check_biome_tag(ident, obj)
         return self.findings
 
     def check_mcmeta(self):
@@ -511,6 +513,71 @@ class Validator:
             elif any(not isinstance(step, list) for step in features):
                 self.add(ERROR, where, "each entry of 'features' must itself be a list")
 
+    def check_biome_tag(self, ident, obj):
+        """A biome tag is how a structure finds its biomes.
+
+        Get one wrong and the game says nothing: the tag is simply empty, and the
+        world generates without a single village in it.
+        """
+        where = f"biome_tag/{ident}"
+        if not isinstance(obj, dict):
+            self.add(ERROR, where, "must be an object")
+            return
+        for key in obj:
+            if key not in TAG_FIELDS:
+                close = _closest(key, TAG_FIELDS)
+                self.add(ERROR, where, f"tag has no field '{key}'",
+                         f"did you mean '{close}'?" if close else f"allowed: {sorted(TAG_FIELDS)}")
+        if "replace" in obj and not isinstance(obj["replace"], bool):
+            self.add(ERROR, where, "'replace' must be true or false",
+                     "omit it, or use false, to add to the tag rather than override it")
+        values = obj.get("values")
+        if values is None:
+            self.add(ERROR, where, "tag has no 'values'")
+            return
+        if not isinstance(values, list):
+            self.add(ERROR, where, "'values' must be a list")
+            return
+        if not values:
+            self.add(WARNING, where, "tag is empty, so it does nothing")
+        seen: set[str] = set()
+        for i, entry in enumerate(values):
+            self.check_tag_entry(f"{where}/values[{i}]", entry, seen)
+
+    def check_tag_entry(self, where, entry, seen: set):
+        required = True
+        if isinstance(entry, dict):
+            required = entry.get("required", True)
+            entry = entry.get("id")
+        if not isinstance(entry, str):
+            self.add(ERROR, where, "entry must be a biome id, a '#tag' reference, "
+                                   'or {"id": "...", "required": false}')
+            return
+        is_tag = entry.startswith("#")
+        ident = _qualify(entry[1:] if is_tag else entry)
+        # '#foo' and 'foo' name different things, so the marker stays in the key
+        key = ("#" if is_tag else "") + ident
+        if key in seen:
+            self.add(WARNING, where, f"'{entry}' is listed twice")
+        seen.add(key)
+        if not required:
+            return          # the point of an optional entry is that it may be absent
+        if is_tag:
+            # vanilla's own tags are not vendored, so only tags this pack could
+            # define are checkable
+            if self._owns(ident) and not self.has("biome_tag", ident):
+                self.add(ERROR, where, f"unknown biome tag '{entry}'",
+                         "it is not defined by this pack")
+        elif not self.has("biome", ident):
+            close = _closest(ident.split(":")[-1],
+                             {b.split(":")[-1] for b in self.registries.ids("biome")})
+            self.add(ERROR, where, f"unknown biome '{entry}'",
+                     f"did you mean '{close}'?" if close else None)
+
+    def _owns(self, ident: str) -> bool:
+        """Is this id in a namespace the pack under test defines?"""
+        return self.pack is not None and _qualify(ident).split(":")[0] in self.pack.namespaces
+
     def check_block_state(self, where, state, required: bool = False):
         if state is None:
             if required:
@@ -544,6 +611,8 @@ class Validator:
                                  f"it has: {sorted(known)}")
 
 
+TAG_FIELDS = {"replace", "values"}
+
 # 26.2 biome schema, read off the vendored vanilla files rather than recalled.
 BIOME_FIELDS = {"temperature", "downfall", "has_precipitation", "effects", "spawners",
                 "spawn_costs", "carvers", "features", "attributes", "temperature_modifier",
@@ -571,6 +640,13 @@ BIOME_ATTRIBUTES = {
     "minecraft:gameplay/snow_golem_melts", "minecraft:gameplay/increased_fire_burnout",
     "minecraft:gameplay/can_pillager_patrol_spawn",
 }
+
+
+def _qualify(ident: str) -> str:
+    """'plains' -> 'minecraft:plains'. Registries.get does this internally; tag
+    checking needs the qualified form for de-duplication and for hints."""
+    return ident if ":" in ident else "minecraft:" + ident
+
 
 def _closest(word: str, options) -> str | None:
     matches = difflib.get_close_matches(word, list(options), n=1, cutoff=0.72)

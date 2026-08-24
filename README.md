@@ -106,7 +106,7 @@ out to be edited (`renders/starter.png`).
 
 ```bash
 worldsmith new     packs/mine --namespace mine --name mine [--caves] [--like minecraft:plains]
-worldsmith check   packs/mine        # schema, dangling refs, dead biomes, smoke test
+worldsmith check   packs/mine        # schema, dangling refs, dead biomes, biome tags, smoke test
 worldsmith render  packs/mine --out renders/mine.png
 worldsmith play    packs/mine        # into Minecraft
 worldsmith export  packs/mine        # a zip for someone else's game

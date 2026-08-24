@@ -22,6 +22,11 @@ CATEGORIES = {
     "placed_feature": "worldgen/placed_feature",
     "dimension": "dimension",
     "dimension_type": "dimension_type",
+    # Biome tags are what put villages, temples and monuments in a custom world:
+    # a structure generates in the biomes its has_structure/* tag lists. They are
+    # loaded so they can be validated. Vanilla merges tags across packs unless an
+    # entry sets "replace"; that is not modelled here, so a later pack simply wins.
+    "biome_tag": "tags/worldgen/biome",
 }
 
 VANILLA_ROOT = Path(__file__).resolve().parent.parent / "vanilla"

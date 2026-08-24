@@ -151,6 +151,73 @@ def test_validator_catches_breakage():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_biome_tags():
+    """Biome tags are how a structure finds its biomes.
+
+    Get one wrong and the game says nothing at all: the tag is empty, and the
+    world generates without a single village in it. So the tags have to be read,
+    and every way of getting one wrong has to be caught.
+    """
+    caught = {
+        "unknown biome": ({"values": ["bad:no_such_biome"]}, "unknown biome"),
+        "vanilla typo": ({"values": ["minecraft:plian"]}, "did you mean 'plains'?"),
+        "no values": ({"replace": False}, "tag has no 'values'"),
+        "values not a list": ({"values": "bad:plains_like"}, "'values' must be a list"),
+        "empty tag": ({"values": []}, "does nothing"),
+        "misspelled field": ({"values": [], "value": []}, "tag has no field 'value'"),
+        "replace not a bool": ({"replace": "false", "values": []}, "must be true or false"),
+        "listed twice": ({"values": ["bad:plains_like"] * 2}, "listed twice"),
+        "same id twice, spelled differently":
+            ({"values": ["plains", "minecraft:plains"]}, "listed twice"),
+        "dangling tag ref": ({"values": ["#bad:nope"]}, "unknown biome tag"),
+        "entry is a number": ({"values": [7]}, "entry must be a biome id"),
+    }
+    # a false positive here would be worse than a miss: it would train people to
+    # ignore the output
+    silent = {
+        "plain id": {"replace": False, "values": ["bad:plains_like"]},
+        "unqualified id": {"values": ["plains"]},
+        # vanilla's own tags are not vendored, so they cannot be resolved
+        "vanilla tag ref": {"values": ["#minecraft:is_overworld"]},
+        "another pack's tag": {"values": ["#other:whatever"]},
+        "optional and absent": {"values": [{"id": "bad:not_here", "required": False}]},
+        # '#x' is a tag reference and 'x' is a biome: not the same entry twice
+        "tag ref beside a biome of that name":
+            {"values": ["#minecraft:plains", "minecraft:plains"]},
+        "object form": {"values": [{"id": "bad:plains_like", "required": True}]},
+    }
+
+    def findings_for(root, obj):
+        scaffold(root, "bad", "bad", template="basic")
+        path = root / "data/bad/tags/worldgen/biome/has_structure/village_plains.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(obj), encoding="utf-8")
+        _, findings = validate_path(root)
+        return [f for f in findings if f.where.startswith("biome_tag/")]
+
+    tmp = tempfile.mkdtemp(prefix="worldsmith-tags-")
+    try:
+        for label, (obj, expected) in caught.items():
+            found = findings_for(Path(tmp) / f"bad_{label.replace(' ', '_')}", obj)
+            messages = " | ".join(f"{f.message} {f.hint or ''}" for f in found)
+            check(f"tag validator catches: {label}", expected in messages,
+                  f"expected {expected!r}, got: {messages[:200] or 'nothing'}")
+        for label, obj in silent.items():
+            found = findings_for(Path(tmp) / f"ok_{label.replace(' ', '_')}", obj)
+            check(f"tag validator accepts: {label}", not found,
+                  "; ".join(f.format() for f in found))
+
+        # and the tags have to reach the registry in the first place, under ids
+        # that keep their sub-directory
+        root = Path(tmp) / "loads"
+        findings_for(root, {"replace": False, "values": ["bad:plains_like"]})
+        tags = Registries.load([str(root)]).data["biome_tag"]
+        check("tag files load under their full id",
+              "bad:has_structure/village_plains" in tags, str(sorted(tags)))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def test_unreachable_biome_detection():
     entries = [
         {"biome": "a", "parameters": {"temperature": [-1, 1], "humidity": [-1, 1],
@@ -331,6 +398,7 @@ def main():
     test_determinism()
     test_vanilla_validates_clean()
     test_validator_catches_breakage()
+    test_biome_tags()
     test_unreachable_biome_detection()
     test_packs_generate()
     test_aquifer_levels()

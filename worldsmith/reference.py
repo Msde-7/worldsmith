@@ -300,6 +300,10 @@ CHECKING IT
   the surface stays bare stone.
 * aquifers_enabled true with the aquifer router fields left at 0: you get flat
   sheets of water underground.
+* A structure that never generates. Structures find their biomes through
+  data/minecraft/tags/worldgen/biome/has_structure/<name>.json, so a custom
+  world has none until those tags list its biomes. A typo in one is silent:
+  the tag is simply empty and no village is ever placed.
 * min_y/height not multiples of 16.
 * Overwriting data/minecraft/dimension/overworld.json and expecting an EXISTING
   world to change. Terrain settings are baked in at world creation.
