@@ -151,7 +151,14 @@ def cmd_render(args):
     x0 = args.center[0] - (n * step) // 2
     z0 = args.center[1] - (n * step) // 2
 
+    known_views = ("map", "height", "biomes", "section")
     views = [v.strip() for v in args.views.split(",") if v.strip()]
+    unknown = [v for v in views if v not in known_views]
+    if unknown:
+        raise SystemExit(f"unknown view(s) {', '.join(unknown)}; --views takes "
+                         f"{', '.join(known_views)}")
+    if args.columns < 1:
+        raise SystemExit("--columns must be at least 1")
     scene = build_scene(world, source, x0, z0, n, n, step=step)
     stats = scene.terrain.stats()
 
