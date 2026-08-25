@@ -132,6 +132,13 @@ own height and its roots taper away underneath.
 
 ![sky islands](renders/sky_islands.png)
 ![sky islands in game](renders/ingame_sky_islands.jpg)
+![gilded isles in game](renders/ingame_gilded_isles.jpg)
+
+That village on the middle island is not decoration. Structures reach a custom
+world through biome tags, so `gilded_isles` lists its own biomes under
+`has_structure/village_plains` and the game does the rest. The same tags switch
+mineshafts and ancient cities off, because those anchor to fixed low altitudes
+and would otherwise hang in the sky underneath the islands.
 
 **terraced_mesas**, a nine-level staircase spline with flat treads and narrow
 risers, so the land climbs in terraces to about y 210, and a surface rule that
