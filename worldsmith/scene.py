@@ -83,15 +83,28 @@ def build_scene(world: World, biome_source: BiomeSource, x0: int, z0: int,
     else:
         min_surface = np.full(n, float(world.noise.min_y))
 
-    # `steep` compares the heightmap one block either side in z; at step > 1 we
-    # scale the sampled gradient to that 2-block baseline.
-    h = terrain.surface_y
-    grad = np.zeros_like(h, dtype=np.float64)
-    if nz >= 3:
-        grad[1:-1, :] = (h[2:, :] - h[:-2, :]) / max(1, step)
-        grad[0, :] = grad[1, :]
-        grad[-1, :] = grad[-2, :]
-    steep = (grad * 2.0) >= 4.0
+    # `steep` looks one block either side of the column and asks for a 4 block
+    # step. It reads both axes, and the two comparisons run in opposite
+    # directions: rising in +z, or falling in +x. Reproducing only the z half
+    # marks 6.5% of a canyon world flat that the game builds as cliff.
+    h = terrain.surface_y.astype(np.float64)
+    z_lo = np.vstack([h[:1], h[:-1]])
+    z_hi = np.vstack([h[1:], h[-1:]])
+    x_lo = np.hstack([h[:, :1], h[:, :-1]])
+    x_hi = np.hstack([h[:, 1:], h[:, -1:]])
+    if step == 1:
+        # the game reads its own chunk, so a lookup off the edge is clamped back
+        # to the column itself rather than crossing into the neighbour
+        zc = ((z0 + np.arange(nz)) & 15)[:, None]
+        xc = ((x0 + np.arange(nx)) & 15)[None, :]
+        z_lo = np.where(zc == 0, h, z_lo)
+        z_hi = np.where(zc == 15, h, z_hi)
+        x_lo = np.where(xc == 0, h, x_lo)
+        x_hi = np.where(xc == 15, h, x_hi)
+    # at step > 1 the neighbours are step blocks away, so scale the difference
+    # back to the 2-block baseline the rule is written against
+    scale = max(1, step)
+    steep = ((z_hi - z_lo) / scale >= 4.0) | ((x_lo - x_hi) / scale >= 4.0)
 
     climate_table = biome_climate_table(world, biomes)
     base_temp = climate_table[biome_idx, 0]
