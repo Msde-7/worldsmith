@@ -323,6 +323,93 @@ def test_biome_search_paths_agree():
     check("an exact tie goes to the first entry", picked == {0}, str(picked))
 
 
+def test_canopy_from_features():
+    """A jungle has to come out under canopy and a desert bare.
+
+    The cover is read off the biome's own feature list, through the placed and
+    configured features tools/extract_worldgen_data.py vendors. If those go
+    missing the walk quietly finds nothing to place, so the numbers are pinned
+    here rather than only the shape.
+    """
+    from worldsmith.canopy import canopy_for
+    names = ["minecraft:desert", "minecraft:plains", "minecraft:savanna", "minecraft:forest",
+             "minecraft:dark_forest", "minecraft:taiga", "minecraft:cherry_grove",
+             "minecraft:birch_forest", "minecraft:stony_peaks"]
+    table = canopy_for(Registries.load(), names)
+    cover = {n.split(":")[-1]: c for n, c in zip(names, table.cover)}
+    leaves = {n.split(":")[-1]: leaf for n, leaf in zip(names, table.leaves)}
+    check("nothing grows in a desert", cover["desert"] == 0.0 and leaves["desert"] is None)
+    check("nothing grows on stony peaks", cover["stony_peaks"] == 0.0)
+    check("plains are open ground", cover["plains"] < 0.05, f"{cover['plains']:.1%}")
+    check("a savanna is scattered", 0.01 < cover["savanna"] < 0.30, f"{cover['savanna']:.1%}")
+    check("a forest is mostly canopy", 0.5 < cover["forest"] <= 1.0, f"{cover['forest']:.1%}")
+    check("a dark forest is closed canopy", cover["dark_forest"] > 0.95, f"{cover['dark_forest']:.1%}")
+    # the leaf block only changes the colour for the ones the game does not tint
+    # from the biome, so those are the ones worth pinning
+    check("a taiga is spruce", leaves["taiga"] == "minecraft:spruce_leaves", str(leaves["taiga"]))
+    check("a birch forest is birch", leaves["birch_forest"] == "minecraft:birch_leaves",
+          str(leaves["birch_forest"]))
+    check("a cherry grove is cherry", leaves["cherry_grove"] == "minecraft:cherry_leaves",
+          str(leaves["cherry_grove"]))
+
+
+def test_canopy_cover_matches_the_field():
+    """Thresholding the field at a cover fraction has to cover that fraction.
+
+    The cutoff comes from a fixed sample of the field rather than the window in
+    front of it, so this checks it holds a long way from where it was taken.
+    """
+    from worldsmith.canopy import canopy_field, cover_cutoff
+    line = np.arange(-40000, -40000 + 600 * 7, 7, dtype=np.float64)
+    xs, zs = np.meshgrid(line, line + 1234)
+    field = canopy_field(xs.ravel(), zs.ravel(), 99)
+    for want in (0.05, 0.30, 0.76, 0.95):
+        got = float((field <= cover_cutoff(want)).mean())
+        check(f"cover {want:.0%} lands within two points", abs(got - want) < 0.02, f"got {got:.1%}")
+    # panning must slide the same wood across the view, not redraw it
+    shifted = canopy_field(xs.ravel() + 7.0, zs.ravel(), 99)
+    same = canopy_field(np.array([1234.0, -99.0]), np.array([-7.0, 4321.0]), 99)
+    check("the field is stable in absolute coordinates",
+          np.allclose(same, canopy_field(np.array([1234.0, -99.0]), np.array([-7.0, 4321.0]), 99))
+          and not np.allclose(shifted, field))
+
+
+def test_decoration_is_paint_only():
+    """--decorate is paint on the map view and must not reach anything else.
+
+    The engine's claim is that the picture matches the game column for column,
+    and the canopy is an estimate, so it is allowed to change the map image and
+    nothing else.
+    """
+    from worldsmith.canopy import canopy_for
+    from worldsmith.render import render_biomes, render_map
+    from worldsmith.scene import build_scene
+    registries = Registries.load()
+    source = BiomeSource.from_json(
+        {"type": "minecraft:multi_noise", "preset": "minecraft:overworld"}, registries)
+    world = World.create(registries, "minecraft:overworld", 4242)
+    for x0, z0 in ((3000, -1500), (-900, 2400), (0, 0)):
+        scene = build_scene(world, source, x0, z0, 48, 48, step=4)
+        if canopy_for(registries, scene.biomes).any():
+            break
+    check("found a window with something growing in it",
+          canopy_for(registries, scene.biomes).any())
+
+    blocks, heights = scene.surface_block.copy(), scene.height.copy()
+    biomes_before = np.asarray(render_biomes(scene, scale=1))
+    plain = np.asarray(render_map(scene, scale=1))
+    decorated = np.asarray(render_map(scene, scale=1, decorate=True))
+    check("the canopy changes the map", not np.array_equal(plain, decorated))
+    check("the canopy leaves the surface blocks alone", np.array_equal(blocks, scene.surface_block))
+    check("the canopy leaves the heights alone", np.array_equal(heights, scene.height))
+    check("the canopy stays out of the biome view",
+          np.array_equal(biomes_before, np.asarray(render_biomes(scene, scale=1))))
+    # water is not ground, so nothing may be painted over the sea
+    sea = np.array([n.split(":")[-1] in ("water", "flowing_water") for n in scene.palette],
+                   dtype=bool)[scene.surface_block]
+    check("nothing grows on water", np.array_equal(plain[sea], decorated[sea]))
+
+
 def test_packs_generate():
     packs = sorted(p for p in (Path(ROOT) / "packs").iterdir() if (p / "pack.mcmeta").is_file())
     check("there are packs to test", bool(packs))
@@ -569,6 +656,9 @@ def main():
     test_unreachable_biome_detection()
     test_preset_biome_source()
     test_biome_search_paths_agree()
+    test_canopy_from_features()
+    test_canopy_cover_matches_the_field()
+    test_decoration_is_paint_only()
     test_packs_generate()
     test_aquifer_levels()
     test_aquifer_barrier()

@@ -12,7 +12,10 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from .colors import biome_color, block_color, grass_color, palette_rgb, parse_hex
+from .canopy import (COLORMAPPED_LEAVES, SOIL, canopy_field, canopy_for, canopy_mottle,
+                     cover_cutoff)
+from .colors import (biome_color, block_color, foliage_color, grass_color, palette_rgb,
+                     parse_hex)
 from .scene import Scene, biome_climate_table
 from .terrain import Terrain, cross_section
 from .world import World
@@ -54,8 +57,45 @@ def _grass_tint(scene: Scene) -> np.ndarray:
     return np.array(colors, dtype=np.float64)[scene.biome_index]
 
 
+def _canopy_layer(scene: Scene):
+    """Where leaves would end up, and what colour they would be.
+
+    An estimate of cover from the biome's own feature list, not a placement: see
+    worldsmith/canopy.py. Returns None when nothing in view grows anything.
+    """
+    table = canopy_for(scene.world.registries, scene.biomes)
+    if not table.any():
+        return None
+    climate = biome_climate_table(scene.world, scene.biomes)
+    colors = []
+    for ident, leaf, (temperature, downfall) in zip(scene.biomes, table.leaves, climate):
+        if leaf is None:
+            colors.append((0, 0, 0))
+            continue
+        if leaf.split(":")[-1] in COLORMAPPED_LEAVES:
+            effects = (scene.world.registries.get("biome", ident) or {}).get("effects") or {}
+            colors.append(parse_hex(effects.get("foliage_color"),
+                                    foliage_color(temperature, downfall)))
+        else:
+            colors.append(block_color(leaf))
+
+    nz, nx = scene.biome_index.shape
+    xs = np.repeat(scene.terrain.xs[None, :], nz, axis=0).astype(np.float64)
+    zs = np.repeat(scene.terrain.zs[:, None], nx, axis=1).astype(np.float64)
+    field = canopy_field(xs, zs, scene.world.seed)
+    # water columns already read as water, so the soil test is what keeps trees
+    # off bare rock and off the sea
+    soil = np.array([name.split(":")[-1] in SOIL for name in scene.palette],
+                    dtype=bool)[scene.surface_block]
+    mask = soil & (field <= cover_cutoff(table.cover)[scene.biome_index])
+    # crowns and the gaps between them, and darker than the open ground it
+    # replaces, which is what makes a wood read as a wood from above
+    mottle = 0.72 + 0.38 * canopy_mottle(xs, zs, scene.world.seed)
+    return mask, np.array(colors, dtype=np.float64)[scene.biome_index] * mottle[..., None]
+
+
 def render_map(scene: Scene, scale: int = 4, shade: bool = True, tint_grass: bool = True,
-               water_depth_shading: bool = True) -> Image.Image:
+               water_depth_shading: bool = True, decorate: bool = False) -> Image.Image:
     palette = palette_rgb(scene.palette).astype(np.float64)
     rgb = palette[scene.surface_block]
 
@@ -81,6 +121,13 @@ def render_map(scene: Scene, scale: int = 4, shade: bool = True, tint_grass: boo
         else:
             t = 0.0
         rgb[water] = ((1 - t) * shallow + t * deep)[water]
+
+    if decorate:
+        layer = _canopy_layer(scene)
+        if layer is not None:
+            mask, leaves = layer
+            # not quite opaque, so the ground still shows through the canopy
+            rgb[mask] = (0.92 * leaves + 0.08 * rgb)[mask]
 
     if shade:
         h = scene.terrain.surface_y.astype(np.float64)

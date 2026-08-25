@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="python 3.10 plus">
   <img src="https://img.shields.io/badge/minecraft-26.2-62B47A" alt="minecraft 26.2">
-  <img src="https://img.shields.io/badge/tests-275%20passing-4C9A2A" alt="275 tests passing">
+  <img src="https://img.shields.io/badge/tests-295%20passing-4C9A2A" alt="295 tests passing">
   <img src="https://img.shields.io/badge/license-MIT-999999" alt="MIT license">
 </p>
 
@@ -99,6 +99,19 @@ which is the view for close-ups.
 
 ![closeup](renders/spires_closeup.png)
 
+Features are placed by the game after generation, so a render is bare ground and
+a wood comes out looking like a field. `--decorate` follows the trees in each
+biome's own feature list, works out how much canopy they add up to and what
+colour the leaves are, and stipples that over the map. It is an estimate of
+cover, not a placement: the game rolls the positions against a random source and
+a survival check the renderer does not run, so the woods land in the right
+biomes rather than on the right blocks, and nothing about it reaches the terrain
+or the in-game comparison.
+
+| bare | `--decorate` |
+|---|---|
+| ![bare](renders/decorate_off.png) | ![decorated](renders/decorate_on.png) |
+
 ## Into the game
 
 `worldsmith play` is the last mile in one command. It rewrites the pack's
@@ -154,7 +167,7 @@ edited, rendered in `renders/starter.png`.
 ```bash
 worldsmith new     packs/mine --namespace mine --name mine [--caves] [--like minecraft:plains]
 worldsmith check   packs/mine        # schema, dangling refs, dead biomes, biome tags, smoke test
-worldsmith render  packs/mine --out renders/mine.png
+worldsmith render  packs/mine --out renders/mine.png [--decorate]
 worldsmith play    packs/mine        # into Minecraft
 worldsmith export  packs/mine        # a zip for someone else's game
 worldsmith reference terrain         # the height formula and what every knob does
@@ -219,6 +232,7 @@ after generation and a render never shows them.
 | `worldsmith/surface.py` | surface rules, including the badlands clay bands |
 | `worldsmith/aquifer.py` | underground fluid levels and the stone barriers between them |
 | `worldsmith/climate.py` | multi-noise biome assignment, presets, and unreachable-biome detection |
+| `worldsmith/canopy.py` | how much canopy a biome's tree features come to, for `--decorate` |
 | `worldsmith/validate.py` | schema, references, splines, block ids, biome boxes, biome tags |
 | `worldsmith/render.py` | the four views and the contact sheet |
 | `worldsmith/play.py` | server runtime, spawn picking, world install |
@@ -241,8 +255,10 @@ else, vanilla included, falls back to an exact per-block scan.
   tie the engine can pick the other side, which is the last 0.04% of columns.
   Most custom packs leave `aquifers_enabled` off and are unaffected.
 * **Carvers and features are not run**, so the trees, ores and ravines `--like`
-  brings along are placed by the game afterwards and never show up in a render.
-  Noise caves are the exception, since they live in the density functions.
+  brings along are placed by the game afterwards. `--decorate` estimates how
+  much canopy a biome's tree features come to and paints that on the map, which
+  is cover rather than placement; the rest never shows up in a render. Noise
+  caves are the exception, since they live in the density functions.
 Vanilla itself, rendered by the engine, biomes and all. A dimension may name a
 preset rather than list its biomes, which is what copying vanilla's overworld
 and changing one spline gives you. Java assembles that table at runtime instead
@@ -257,7 +273,7 @@ read out the real one: 7594 boxes over 55 biomes, vendored like the rest.
 ## Tests
 
 ```bash
-python tests/run_all.py                              # 275 checks, no network
+python tests/run_all.py                              # 295 checks, no network
 python tools/verify_in_game.py packs/basalt_spires   # the real game, opt-in
 python tools/extract_block_colors.py                 # re-read block colours from the client jar
 python tools/extract_worldgen_data.py                # re-read the preset biome tables and the features

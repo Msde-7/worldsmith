@@ -157,8 +157,11 @@ def cmd_render(args):
 
     panels = []
     if "map" in views:
+        decorate = getattr(args, "decorate", False)
         panels.append((f"surface  {n * step}x{n * step} blocks @ ({args.center[0]},{args.center[1]})  "
-                       f"1px = {step}b", render_map(scene, scale=args.scale)))
+                       f"1px = {step}b" + ("   canopy estimated from the biomes' features"
+                                           if decorate else ""),
+                       render_map(scene, scale=args.scale, decorate=decorate)))
     if "height" in views:
         panels.append((f"elevation  y {stats['min_y']}..{stats['max_y']}  contours every 16",
                        render_height(scene.terrain, scale=args.scale)))
@@ -376,6 +379,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--center", type=int, nargs=2, default=[0, 0], metavar=("X", "Z"))
     p.add_argument("--views", default="map,height,biomes,section")
     p.add_argument("--columns", type=int, default=2)
+    p.add_argument("--decorate", action="store_true",
+                   help="stipple the canopy the biomes' tree features imply (an estimate, "
+                        "not a placement)")
     p.set_defaults(func=cmd_render)
 
     p = sub.add_parser("probe", help="print every router value at one position")

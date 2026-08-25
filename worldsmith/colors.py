@@ -67,18 +67,41 @@ _GRASS_ANCHORS = [
 ]
 
 
-def grass_color(temperature: float, downfall: float) -> tuple[int, int, int]:
+# The same points off vanilla's foliage colormap, which is the one leaves take.
+# Sampled the same way, and the grass anchors above come back out of grass.png
+# exactly, which is what says the lookup is right.
+_FOLIAGE_ANCHORS = [
+    (0.00, 0.5, (96, 161, 123)),    # snowy
+    (0.25, 0.8, (104, 164, 100)),   # taiga
+    (0.50, 0.5, (113, 167, 77)),    # cool
+    (0.80, 0.4, (119, 171, 47)),    # plains
+    (0.95, 0.9, (48, 187, 11)),     # jungle
+    (1.20, 0.0, (174, 164, 42)),    # savanna / dry
+    (2.00, 0.0, (174, 164, 42)),    # desert
+]
+
+
+def _blend(anchors, temperature: float, downfall: float) -> tuple[int, int, int]:
     """Inverse-distance blend of the anchors above; close enough to read."""
     t = float(np.clip(temperature, 0.0, 2.0))
     d = float(np.clip(downfall, 0.0, 1.0))
     weights, colors = [], []
-    for at, ad, rgb in _GRASS_ANCHORS:
+    for at, ad, rgb in anchors:
         dist = (at - t) ** 2 + ((ad - d) * 0.6) ** 2
         weights.append(1.0 / (dist + 1e-3))
         colors.append(rgb)
     w = np.array(weights)[:, None]
     c = (np.array(colors) * w).sum(axis=0) / w.sum()
     return tuple(int(round(v)) for v in c)
+
+
+def grass_color(temperature: float, downfall: float) -> tuple[int, int, int]:
+    return _blend(_GRASS_ANCHORS, temperature, downfall)
+
+
+def foliage_color(temperature: float, downfall: float) -> tuple[int, int, int]:
+    """Leaf tint for the biome, which is darker and deeper than its grass."""
+    return _blend(_FOLIAGE_ANCHORS, temperature, downfall)
 
 
 def parse_hex(value, default=(63, 118, 228)) -> tuple[int, int, int]:
