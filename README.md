@@ -4,7 +4,6 @@
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="python 3.10 plus">
   <img src="https://img.shields.io/badge/minecraft-26.2-62B47A" alt="minecraft 26.2">
   <img src="https://img.shields.io/badge/tests-264%20passing-4C9A2A" alt="264 tests passing">
-  <img src="https://img.shields.io/badge/heightmap%20match-100%25-4C9A2A" alt="100 percent heightmap match">
   <img src="https://img.shields.io/badge/license-MIT-999999" alt="MIT license">
 </p>
 
