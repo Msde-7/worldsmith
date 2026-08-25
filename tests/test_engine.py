@@ -410,6 +410,33 @@ def test_decoration_is_paint_only():
     check("nothing grows on water", np.array_equal(plain[sea], decorated[sea]))
 
 
+def test_clay_bands_against_the_game():
+    """The 192 terracotta layers, as the game built them.
+
+    generateBands is two easy translation slips away from a different table:
+    vanilla steps the orange bands with a for loop whose own i++ runs on top of
+    the i += inside it, and its band width is minSize + nextInt(3). Getting
+    either wrong shifts the random stream and repaints every mesa. The indices
+    below were read back out of a generated world.
+    """
+    from worldsmith.surface import SurfaceSystem
+    golden = json.loads((Path(HERE) / "golden" / "surface_blocks.json").read_text(encoding="utf-8"))
+    registries = Registries.load([str(Path(ROOT) / golden["pack"])])
+    ids = [i for i in registries.ids("dimension") if registries.origin("dimension", i) != "vanilla-26.2"]
+    dimension = registries.get("dimension", golden["dimension"]) or registries.get("dimension", ids[0])
+    world = World.create(registries, dimension["generator"]["settings"], golden["seed"])
+    bands = SurfaceSystem(world).clay_bands()
+    check("there are 192 bands", len(bands) == 192, str(len(bands)))
+    # a handful of indices the world pinned down, spread across the table
+    expected = {39: "orange_terracotta", 41: "light_gray_terracotta", 42: "white_terracotta",
+                43: "light_gray_terracotta", 47: "orange_terracotta", 51: "brown_terracotta",
+                61: "yellow_terracotta", 67: "orange_terracotta", 104: "orange_terracotta",
+                137: "orange_terracotta"}
+    bad = {i: bands[i].split(":")[-1] for i, name in expected.items()
+           if bands[i].split(":")[-1] != name}
+    check("the band table is the game's band table", not bad, str(bad))
+
+
 def test_packs_generate():
     packs = sorted(p for p in (Path(ROOT) / "packs").iterdir() if (p / "pack.mcmeta").is_file())
     check("there are packs to test", bool(packs))
@@ -659,6 +686,7 @@ def main():
     test_canopy_from_features()
     test_canopy_cover_matches_the_field()
     test_decoration_is_paint_only()
+    test_clay_bands_against_the_game()
     test_packs_generate()
     test_aquifer_levels()
     test_aquifer_barrier()
