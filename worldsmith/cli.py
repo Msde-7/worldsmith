@@ -45,13 +45,29 @@ def _resolve_dimension(registries: Registries, dimension: str | None):
     return dimension, obj
 
 
+def _settings_biomes(registries, settings_id: str, biome: str | None) -> BiomeSource:
+    """Biomes for a bare --settings render, which has no dimension to ask.
+
+    Vanilla's own settings borrow the multi-noise preset of the same name, so
+    `--settings minecraft:overworld` previews the biomes the game would place
+    rather than one flat colour. Anything else, or an explicit --biome, is fixed.
+    """
+    if biome is None and registries.get("multi_noise_biome_source_parameter_list", settings_id):
+        try:
+            return BiomeSource.from_json(
+                {"type": "minecraft:multi_noise", "preset": settings_id}, registries)
+        except ValueError as exc:
+            print(f"note: {exc}", file=sys.stderr)
+    return BiomeSource.from_json({"type": "minecraft:fixed",
+                                  "biome": biome or "minecraft:plains"})
+
+
 def _load(args) -> tuple[World, BiomeSource, str]:
     paths = [args.pack] if getattr(args, "pack", None) else []
     registries = Registries.load(paths, version=args.version)
     if getattr(args, "settings", None):
         settings_id = args.settings
-        source = BiomeSource.from_json({"type": "minecraft:fixed",
-                                        "biome": getattr(args, "biome", None) or "minecraft:plains"})
+        source = _settings_biomes(registries, settings_id, getattr(args, "biome", None))
         label = settings_id
     else:
         dim_id, dimension = _resolve_dimension(registries, getattr(args, "dimension", None))
@@ -60,7 +76,7 @@ def _load(args) -> tuple[World, BiomeSource, str]:
         if not isinstance(settings_id, str):
             raise SystemExit(f"{dim_id}: generator.settings must be a noise_settings id")
         try:
-            source = BiomeSource.from_json(generator.get("biome_source") or {})
+            source = BiomeSource.from_json(generator.get("biome_source") or {}, registries)
         except ValueError as exc:
             print(f"note: {exc}", file=sys.stderr)
             source = BiomeSource.from_json({"type": "minecraft:fixed", "biome": "minecraft:plains"})

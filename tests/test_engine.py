@@ -13,7 +13,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import worldsmith.noise as noise_mod
-from worldsmith.climate import BiomeSource, unreachable_biomes
+from worldsmith.climate import (BiomeSource, assign_biomes, climate_target,
+                                unreachable_biomes)
 from worldsmith.density import Ctx, prepare
 from worldsmith.pack import scaffold
 from worldsmith.registry import Registries
@@ -234,6 +235,92 @@ def test_unreachable_biome_detection():
     source = BiomeSource.from_json({"type": "minecraft:multi_noise", "biomes": entries})
     dead = unreachable_biomes(source, samples=20000)
     check("detects a biome that can never win", dead == ["b"], str(dead))
+
+    # a biome may claim several boxes, and one of them winning is enough. Vanilla
+    # hands out dozens per biome, so counting per entry called almost all of them
+    # dead; b keeps a losing box here and still generates.
+    full = {"humidity": [-1, 1], "continentalness": [-1, 1], "erosion": [-1, 1],
+            "depth": [0, 1], "weirdness": [-1, 1], "offset": 0.0}
+    several = [
+        {"biome": "a", "parameters": {**full, "temperature": [-1, -0.5]}},
+        entries[1],
+        {"biome": "b", "parameters": {**full, "temperature": [0.5, 1]}},
+    ]
+    source = BiomeSource.from_json({"type": "minecraft:multi_noise", "biomes": several})
+    dead = unreachable_biomes(source, samples=20000)
+    check("a biome with one winning box out of two is alive", dead == [], str(dead))
+
+
+def test_preset_biome_source():
+    """A pack that starts from vanilla's overworld has to get vanilla's biomes.
+
+    The table behind minecraft:overworld is assembled in Java, so mcmeta ships
+    the preset name back as the whole file and worldsmith used to give up and
+    preview such a pack as bare terrain. tools/extract_biome_parameters.py reads
+    the real one out of the server jar; this checks it is vendored and lands.
+    """
+    registries = Registries.load()
+    table = registries.get("multi_noise_biome_source_parameter_list", "minecraft:overworld") or {}
+    check("the overworld preset table is vendored", bool(table.get("biomes")),
+          "run python tools/extract_biome_parameters.py")
+    if not table.get("biomes"):
+        return
+    source = BiomeSource.from_json(
+        {"type": "minecraft:multi_noise", "preset": "minecraft:overworld"}, registries)
+    check("the preset resolves to a multi_noise source", source.kind == "multi_noise")
+    # vanilla gives one biome as many as a hundred boxes, and they have to fold
+    # down, or every histogram and legend counts the same biome several times
+    check("entries fold down to unique biomes",
+          len(source.biomes) == len(set(source.biomes))
+          and source.mins.shape[0] > len(source.biomes),
+          f"{source.mins.shape[0]} entries, {len(source.biomes)} biomes")
+    check("the ordinary overworld biomes are in it",
+          {"minecraft:plains", "minecraft:ocean", "minecraft:jungle"} <= set(source.biomes),
+          str(sorted(source.biomes)[:6]))
+
+    world = World.create(registries, "minecraft:overworld", 12345)
+    line = np.arange(-2048, 2048, 64, dtype=np.int64)
+    xs = np.repeat(line, len(line))
+    zs = np.tile(line, len(line))
+    index = assign_biomes(source, climate_target(world, xs, zs, np.full(len(xs), 64)))
+    check("every index lands inside the biome list",
+          int(index.min()) >= 0 and int(index.max()) < len(source.biomes))
+    placed = len(set(index.tolist()))
+    check("the preset places many different biomes", placed >= 15,
+          f"only {placed} over {len(xs)} columns")
+
+    # and with nothing to resolve against it has to say so rather than guess
+    try:
+        BiomeSource.from_json({"type": "minecraft:multi_noise", "preset": "minecraft:overworld"})
+        check("an unresolvable preset is an error", False, "it was accepted")
+    except ValueError as exc:
+        check("an unresolvable preset is an error", "preset" in str(exc), str(exc))
+
+
+def test_biome_search_paths_agree():
+    """The numba search and the numpy fallback have to pick the same biome.
+
+    Ties go to whichever entry comes first, so both have to add the seven
+    parameters in the same order or they disagree along every box boundary.
+    """
+    from worldsmith.climate import _nearest_box_numpy
+    rng = np.random.default_rng(7)
+    for k, n in ((12, 4000), (200, 3000)):
+        lo = rng.uniform(-1, 1, size=(k, 7))
+        source = BiomeSource(kind="multi_noise", biomes=[f"b{i}" for i in range(k)],
+                             mins=np.ascontiguousarray(lo),
+                             maxs=np.ascontiguousarray(lo + rng.uniform(0, 0.8, size=(k, 7))),
+                             entry_biome=np.arange(k, dtype=np.int32))
+        target = rng.uniform(-1.2, 1.5, size=(n, 7))
+        check(f"the two searches agree over {k} boxes",
+              np.array_equal(assign_biomes(source, target),
+                             source.entry_biome[_nearest_box_numpy(source, target)]))
+    # identical boxes are an exact tie, which the first entry has to win
+    same = BiomeSource(kind="multi_noise", biomes=list("abcde"),
+                       mins=np.zeros((5, 7)), maxs=np.full((5, 7), 0.5),
+                       entry_biome=np.arange(5, dtype=np.int32))
+    picked = set(assign_biomes(same, rng.uniform(-1, 1, size=(2000, 7))).tolist())
+    check("an exact tie goes to the first entry", picked == {0}, str(picked))
 
 
 def test_packs_generate():
@@ -480,6 +567,8 @@ def main():
     test_validator_catches_breakage()
     test_biome_tags()
     test_unreachable_biome_detection()
+    test_preset_biome_source()
+    test_biome_search_paths_agree()
     test_packs_generate()
     test_aquifer_levels()
     test_aquifer_barrier()

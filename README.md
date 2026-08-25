@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="python 3.10 plus">
   <img src="https://img.shields.io/badge/minecraft-26.2-62B47A" alt="minecraft 26.2">
-  <img src="https://img.shields.io/badge/tests-264%20passing-4C9A2A" alt="264 tests passing">
+  <img src="https://img.shields.io/badge/tests-275%20passing-4C9A2A" alt="275 tests passing">
   <img src="https://img.shields.io/badge/license-MIT-999999" alt="MIT license">
 </p>
 
@@ -218,7 +218,7 @@ after generation and a render never shows them.
 | `worldsmith/terrain.py` | heightmaps and cross-sections, lattice or per-block sampling |
 | `worldsmith/surface.py` | surface rules, including the badlands clay bands |
 | `worldsmith/aquifer.py` | underground fluid levels and the stone barriers between them |
-| `worldsmith/climate.py` | multi-noise biome assignment, and unreachable-biome detection |
+| `worldsmith/climate.py` | multi-noise biome assignment, presets, and unreachable-biome detection |
 | `worldsmith/validate.py` | schema, references, splines, block ids, biome boxes, biome tags |
 | `worldsmith/render.py` | the four views and the contact sheet |
 | `worldsmith/play.py` | server runtime, spawn picking, world install |
@@ -243,11 +243,12 @@ else, vanilla included, falls back to an exact per-block scan.
 * **Carvers and features are not run**, so the trees, ores and ravines `--like`
   brings along are placed by the game afterwards and never show up in a render.
   Noise caves are the exception, since they live in the density functions.
-* **Vanilla's biome presets cannot be previewed.** `{"preset": "minecraft:overworld"}`
-  resolves in Java code rather than in data, so such a dimension renders with
-  terrain only. Custom packs list their biomes and preview fine.
-
-Vanilla itself, rendered by the engine.
+Vanilla itself, rendered by the engine, biomes and all. A dimension may name a
+preset rather than list its biomes, which is what copying vanilla's overworld
+and changing one spline gives you. Java assembles that table at runtime instead
+of shipping it as data, so mcmeta's copy of it is the preset name again, and
+`tools/extract_worldgen_data.py` runs the server jar's own data generator to
+read out the real one: 7594 boxes over 55 biomes, vendored like the rest.
 
 ![vanilla overworld](renders/vanilla_overworld.png)
 
@@ -256,13 +257,14 @@ Vanilla itself, rendered by the engine.
 ## Tests
 
 ```bash
-python tests/run_all.py                              # 264 checks, no network
+python tests/run_all.py                              # 275 checks, no network
 python tools/verify_in_game.py packs/basalt_spires   # the real game, opt-in
 python tools/extract_block_colors.py                 # re-read block colours from the client jar
+python tools/extract_worldgen_data.py                # re-read the preset biome tables and the features
 ```
 
-The second and third download a server jar, a Java runtime or a client jar into
-`.runtime/` on first use, and the second writes an `eula.txt` there.
+Every one but the first downloads a server jar, a Java runtime or a client jar
+into `.runtime/` on first use, and `verify_in_game` writes an `eula.txt` there.
 
 ## License and credit
 

@@ -417,21 +417,42 @@ class Validator:
             return
         stype = str(source.get("type", "")).split(":")[-1]
         if stype == "multi_noise":
-            if "preset" in source:
-                self.add(INFO, where, f"biome_source uses preset '{source['preset']}'; "
-                                      "worldsmith cannot preview biomes for presets "
-                                      "(their parameters live in Java code)")
+            entries = source.get("biomes")
+            if not entries and "preset" in source:
+                # the entries behind a preset are Mojang's, so they are resolved
+                # to prove the pack will find biomes, and not audited further
+                self.check_preset(where, str(source["preset"]))
+            elif not isinstance(entries, list) or not entries:
+                self.add(ERROR, where, "multi_noise biome_source needs a non-empty 'biomes' list "
+                                       "or a 'preset'")
             else:
-                entries = source.get("biomes")
-                if not isinstance(entries, list) or not entries:
-                    self.add(ERROR, where, "multi_noise biome_source needs a non-empty 'biomes' list")
-                else:
-                    self.check_biome_entries(where, entries)
+                self.check_biome_entries(where, entries)
         elif stype == "fixed":
             if not self.has("biome", str(source.get("biome"))):
                 self.add(ERROR, where, f"fixed biome_source references unknown biome '{source.get('biome')}'")
         elif stype not in ("checkerboard", "the_end"):
             self.add(ERROR, where, f"unknown biome_source type '{source.get('type')}'")
+
+    def check_preset(self, where, preset):
+        """A preset names a biome table that has to be vendored to be usable."""
+        table = self.registries.get("multi_noise_biome_source_parameter_list", preset)
+        if table is None:
+            self.add(ERROR, where, f"biome_source names unknown preset '{preset}'")
+            return
+        entries = table.get("biomes")
+        if not entries:
+            self.add(ERROR, where, f"no biome table is vendored for preset '{preset}', so the "
+                                   "preview would have no biomes to place",
+                     "run python tools/extract_biome_parameters.py to read it out of the server jar")
+            return
+        biomes = {str(e.get("biome")) for e in entries if isinstance(e, dict)}
+        missing = sorted(b for b in biomes if not self.has("biome", b))
+        if missing:
+            self.add(ERROR, where, f"preset '{preset}' places {len(missing)} biome(s) this pack "
+                                   f"cannot resolve: {', '.join(missing[:4])}")
+        else:
+            self.add(INFO, where, f"biome_source uses preset '{preset}': "
+                                  f"{len(entries)} entries, {len(biomes)} biomes")
 
     def check_biome_entries(self, where, entries):
         names = []
