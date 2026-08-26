@@ -97,10 +97,10 @@ def improved_noise_grid(p, xi, xf, zi, zf, px, px1, ys, yo, y_scale, y_limit,
 
 
 @njit(cache=True, parallel=True, fastmath=False, nogil=True)
-def improved_noise_row(p, xi, xf, zi, zf, px, px1, y, yo, y_scale, y_limit,
+def improved_noise_row(p, xs, zs, xo, zo, y, yo, y_scale, y_limit,
                        gx, gy, gz, out):
     """out[0, n] = ImprovedNoise sample at (x[n], y, z[n]), threaded over n."""
-    n_count = xi.shape[0]
+    n_count = xs.shape[0]
     yv = y + yo
     yfl = np.floor(yv)
     yidx = np.int64(yfl)
@@ -112,13 +112,18 @@ def improved_noise_row(p, xi, xf, zi, zf, px, px1, y, yo, y_scale, y_limit,
     sy = yf * yf * yf * (yf * (yf * 6.0 - 15.0) + 10.0)
     yy1 = yy - 1.0
     for ni in prange(n_count):
-        h = px[ni]
-        i2 = px1[ni]
+        xv = xs[ni] + xo
+        xfl = np.floor(xv)
+        xidx = np.int64(xfl)
+        zv = zs[ni] + zo
+        zfl = np.floor(zv)
+        h = p[xidx & 0xFF]
+        i2 = p[(xidx + 1) & 0xFF]
         j2 = p[(h + yidx) & 0xFF]
         k2 = p[(h + yidx + 1) & 0xFF]
         l2 = p[(i2 + yidx) & 0xFF]
         m2 = p[(i2 + yidx + 1) & 0xFF]
-        zbase = zi[ni]
+        zbase = np.int64(zfl)
         a0 = p[(j2 + zbase) & 0xFF] & 15
         a1 = p[(l2 + zbase) & 0xFF] & 15
         a2 = p[(k2 + zbase) & 0xFF] & 15
@@ -128,8 +133,8 @@ def improved_noise_row(p, xi, xf, zi, zf, px, px1, y, yo, y_scale, y_limit,
         a6 = p[(k2 + zbase + 1) & 0xFF] & 15
         a7 = p[(m2 + zbase + 1) & 0xFF] & 15
 
-        dx = xf[ni]
-        dz = zf[ni]
+        dx = xv - xfl
+        dz = zv - zfl
         dx1 = dx - 1.0
         dz1 = dz - 1.0
 
@@ -199,24 +204,21 @@ def sample_grid(noise, x, y, z, y_scale, y_limit):
     if parts is None:
         return None
     xs, ys, zs, yl, out_shape = parts
-    xv = xs + noise.xo
-    zv = zs + noise.zo
-    xfl = np.floor(xv)
-    zfl = np.floor(zv)
-    xi = xfl.astype(np.int64)
-    zi = zfl.astype(np.int64)
-    xf = xv - xfl
-    zf = zv - zfl
     p = noise.p
-    px = p[xi & 0xFF]
-    px1 = p[(xi + 1) & 0xFF]
     out = np.empty((ys.shape[0], xs.shape[0]), dtype=np.float64)
     # one y row is a 2D noise, and the grid kernel would have nothing to spread
     if ys.shape[0] == 1 and xs.shape[0] >= 512:
-        improved_noise_row(p, xi, xf, zi, zf, px, px1, float(ys[0]), float(noise.yo),
+        improved_noise_row(p, np.ascontiguousarray(xs), np.ascontiguousarray(zs),
+                           float(noise.xo), float(noise.zo), float(ys[0]), float(noise.yo),
                            float(y_scale), float(yl[0]), GRAD_X, GRAD_Y, GRAD_Z, out)
     else:
-        improved_noise_grid(p, xi, xf, zi, zf, px, px1, np.ascontiguousarray(ys),
-                            float(noise.yo), float(y_scale), np.ascontiguousarray(yl),
-                            GRAD_X, GRAD_Y, GRAD_Z, out)
+        xv = xs + noise.xo
+        zv = zs + noise.zo
+        xfl = np.floor(xv)
+        zfl = np.floor(zv)
+        xi = xfl.astype(np.int64)
+        zi = zfl.astype(np.int64)
+        improved_noise_grid(p, xi, xv - xfl, zi, zv - zfl, p[xi & 0xFF], p[(xi + 1) & 0xFF],
+                            np.ascontiguousarray(ys), float(noise.yo), float(y_scale),
+                            np.ascontiguousarray(yl), GRAD_X, GRAD_Y, GRAD_Z, out)
     return out.reshape(out_shape) if out.shape != out_shape else out
