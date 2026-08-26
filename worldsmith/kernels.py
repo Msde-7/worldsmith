@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import numpy as np
 
+WRAP_PERIOD = 3.3554432e7
+WRAP_HALF = WRAP_PERIOD / 2.0
+
 try:
     from numba import njit, prange
     HAVE_NUMBA = True
@@ -219,6 +222,127 @@ def improved_noise_points(p, xs, ys, zs, xo, yo, zo, y_scale, y_limit, gx, gy, g
         low = lo0 + sy * (lo1 - lo0)
         high = hi0 + sy * (hi1 - hi0)
         out[0, ni] = low + sz * (high - low)
+@njit(cache=True, parallel=True, fastmath=False, nogil=True)
+def perlin_row(p_stack, xo, yo, zo, coef, input_f, xs, zs, y, gx, gy, gz, out):
+    """out[0, n] = sum over octaves of coef[k] * one Perlin sample, y_scale 0."""
+    n_count = xs.shape[0]
+    k_count = p_stack.shape[0]
+    for ni in prange(n_count):
+        total = 0.0
+        for k in range(k_count):
+            f = input_f[k]
+            xw = xs[ni] * f
+            xw = xw - np.floor(xw / WRAP_PERIOD + 0.5) * WRAP_PERIOD
+            zw = zs[ni] * f
+            zw = zw - np.floor(zw / WRAP_PERIOD + 0.5) * WRAP_PERIOD
+            yw = y * f
+            yw = yw - np.floor(yw / WRAP_PERIOD + 0.5) * WRAP_PERIOD
+
+            p = p_stack[k]
+            xv = xw + xo[k]
+            xfl = np.floor(xv)
+            xidx = np.int64(xfl)
+            yv = yw + yo[k]
+            yfl = np.floor(yv)
+            yidx = np.int64(yfl)
+            zv = zw + zo[k]
+            zfl = np.floor(zv)
+            zbase = np.int64(zfl)
+
+            yf = yv - yfl
+            yy = yf
+            sy = yf * yf * yf * (yf * (yf * 6.0 - 15.0) + 10.0)
+            yy1 = yy - 1.0
+
+            h = p[xidx & 0xFF]
+            i2 = p[(xidx + 1) & 0xFF]
+            j2 = p[(h + yidx) & 0xFF]
+            k2 = p[(h + yidx + 1) & 0xFF]
+            l2 = p[(i2 + yidx) & 0xFF]
+            m2 = p[(i2 + yidx + 1) & 0xFF]
+            a0 = p[(j2 + zbase) & 0xFF] & 15
+            a1 = p[(l2 + zbase) & 0xFF] & 15
+            a2 = p[(k2 + zbase) & 0xFF] & 15
+            a3 = p[(m2 + zbase) & 0xFF] & 15
+            a4 = p[(j2 + zbase + 1) & 0xFF] & 15
+            a5 = p[(l2 + zbase + 1) & 0xFF] & 15
+            a6 = p[(k2 + zbase + 1) & 0xFF] & 15
+            a7 = p[(m2 + zbase + 1) & 0xFF] & 15
+
+            dx = xv - xfl
+            dz = zv - zfl
+            dx1 = dx - 1.0
+            dz1 = dz - 1.0
+
+            n0 = gx[a0] * dx + gy[a0] * yy + gz[a0] * dz
+            n1 = gx[a1] * dx1 + gy[a1] * yy + gz[a1] * dz
+            n2 = gx[a2] * dx + gy[a2] * yy1 + gz[a2] * dz
+            n3 = gx[a3] * dx1 + gy[a3] * yy1 + gz[a3] * dz
+            n4 = gx[a4] * dx + gy[a4] * yy + gz[a4] * dz1
+            n5 = gx[a5] * dx1 + gy[a5] * yy + gz[a5] * dz1
+            n6 = gx[a6] * dx + gy[a6] * yy1 + gz[a6] * dz1
+            n7 = gx[a7] * dx1 + gy[a7] * yy1 + gz[a7] * dz1
+
+            sx = dx * dx * dx * (dx * (dx * 6.0 - 15.0) + 10.0)
+            sz = dz * dz * dz * (dz * (dz * 6.0 - 15.0) + 10.0)
+
+            lo0 = n0 + sx * (n1 - n0)
+            lo1 = n2 + sx * (n3 - n2)
+            hi0 = n4 + sx * (n5 - n4)
+            hi1 = n6 + sx * (n7 - n6)
+            low = lo0 + sy * (lo1 - lo0)
+            high = hi0 + sy * (hi1 - hi0)
+            total += coef[k] * (low + sz * (high - low))
+        out[0, ni] = total
+
+
+def octave_stack(perlin):
+    """Per-octave arrays in the order sample() walks them, built once."""
+    stack = getattr(perlin, "_octave_stack", None)
+    if stack is None:
+        ps, xo, yo, zo, coef, inf = [], [], [], [], [], []
+        input_f = perlin.lowest_freq_input_factor
+        value_f = perlin.lowest_freq_value_factor
+        for i, octave in enumerate(perlin.noise_levels):
+            if octave is not None:
+                ps.append(octave.p)
+                xo.append(octave.xo)
+                yo.append(octave.yo)
+                zo.append(octave.zo)
+                coef.append(perlin.amplitudes[i] * value_f)
+                inf.append(input_f)
+            input_f *= 2.0
+            value_f /= 2.0
+        stack = () if not ps else (
+            np.ascontiguousarray(ps), np.array(xo), np.array(yo), np.array(zo),
+            np.array(coef), np.array(inf))
+        perlin._octave_stack = stack
+    return stack or None
+
+
+def sample_octaves(perlin, x, y, z):
+    """The whole octave stack in one kernel. None when the layout does not fit."""
+    if np.ndim(y) != 0:
+        return None
+    xs, zs = _flat_row(x), _flat_row(z)
+    if xs is None or zs is None or xs.shape != zs.shape or xs.shape[0] < 512:
+        return None
+    stack = octave_stack(perlin)
+    if stack is None:
+        return None
+    out = np.empty((1, xs.shape[0]), dtype=np.float64)
+    perlin_row(*stack, xs, zs, float(y), GRAD_X, GRAD_Y, GRAD_Z, out)
+    shape = np.broadcast_shapes(np.shape(x), np.shape(y), np.shape(z))
+    return out.reshape(shape) if out.shape != shape else out
+
+
+def _flat_row(v):
+    a = np.asarray(v, dtype=np.float64)
+    if a.ndim == 1:
+        return np.ascontiguousarray(a)
+    if a.ndim == 2 and a.shape[0] == 1:
+        return np.ascontiguousarray(a[0])
+    return None
 
 
 def pointwise(x, y, z, y_limit):

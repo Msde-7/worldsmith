@@ -27,8 +27,7 @@ _GX = np.ascontiguousarray(GRADIENT[:, 0])
 _GY = np.ascontiguousarray(GRADIENT[:, 1])
 _GZ = np.ascontiguousarray(GRADIENT[:, 2])
 
-WRAP_PERIOD = 3.3554432e7
-WRAP_HALF = WRAP_PERIOD / 2.0
+from .kernels import WRAP_HALF, WRAP_PERIOD  # noqa: E402
 
 # Turned off by the test that compares the numba kernel against the numpy path.
 USE_KERNEL = [True]
@@ -184,6 +183,11 @@ class PerlinNoise:
         return self.noise_levels[len(self.noise_levels) - 1 - i]
 
     def sample(self, x, y, z, y_scale=0.0, y_limit=0.0, fix_y=False):
+        # y_scale 0 means y_limit is never read, so the whole stack fits one call
+        if not fix_y and y_scale == 0.0 and kernels.HAVE_NUMBA and USE_KERNEL[0]:
+            fast = kernels.sample_octaves(self, x, y, z)
+            if fast is not None:
+                return fast
         value = 0.0
         input_f = self.lowest_freq_input_factor
         value_f = self.lowest_freq_value_factor
