@@ -1,13 +1,19 @@
-"""Optional numba kernel for the Perlin inner loop.
+"""Optional numba kernels for the Perlin inner loop.
 
 Profiling says about 85% of a render is ImprovedNoise.sample, and inside that it
 is the eight gradient-dot gathers. numpy does those as fancy-index gathers over
 the whole (levels x columns) grid; numba does them as scalar loads in a parallel
 loop, which is roughly two orders of magnitude cheaper.
 
-The kernel only handles the separable layout the renderer uses, x and z varying
+There are two, differing only in which axis they hand to the threads. A 3D
+noise arrives as a whole column of y levels and is split over those. A 2D one
+arrives as a single row, which left the grid kernel nothing to spread and ran it
+on one core: those are most of the noises in a router and about half a render,
+so they get a kernel that is parallel over the columns instead.
+
+The kernels only handle the separable layout the renderer uses, x and z varying
 along columns and y along rows. Anything else falls back to the numpy path in
-worldsmith.noise, and tests/test_engine.py asserts the two agree bit for bit.
+worldsmith.noise, and tests/test_engine.py asserts they agree bit for bit.
 """
 from __future__ import annotations
 
@@ -92,6 +98,70 @@ def improved_noise_grid(p, xi, xf, zi, zf, px, px1, ys, yo, y_scale, y_limit,
             out[mi, ni] = low + sz * (high - low)
 
 
+@njit(cache=True, parallel=True, fastmath=False, nogil=True)
+def improved_noise_row(p, xi, xf, zi, zf, px, px1, y, yo, y_scale, y_limit,
+                       gx, gy, gz, out):
+    """out[0, n] = ImprovedNoise sample at (x[n], y, z[n]).
+
+    The grid kernel spreads its work over y, which is right for a 3D noise and
+    useless for a 2D one: those come in as a single row, so it ran on one core
+    however many the machine has. Every purely 2D noise takes this path instead,
+    parallel over the columns, with the y terms lifted clear of the loop. Same
+    arithmetic in the same order, so the two agree bit for bit.
+    """
+    n_count = xi.shape[0]
+    yv = y + yo
+    yfl = np.floor(yv)
+    yidx = np.int64(yfl)
+    yf = yv - yfl
+    yy = yf
+    if y_scale != 0.0:
+        t = y_limit if (y_limit >= 0.0 and y_limit < yf) else yf
+        yy = yf - np.floor(t / y_scale + 1.0e-7) * y_scale
+    sy = yf * yf * yf * (yf * (yf * 6.0 - 15.0) + 10.0)
+    yy1 = yy - 1.0
+    for ni in prange(n_count):
+        h = px[ni]
+        i2 = px1[ni]
+        j2 = p[(h + yidx) & 0xFF]
+        k2 = p[(h + yidx + 1) & 0xFF]
+        l2 = p[(i2 + yidx) & 0xFF]
+        m2 = p[(i2 + yidx + 1) & 0xFF]
+        zbase = zi[ni]
+        a0 = p[(j2 + zbase) & 0xFF] & 15
+        a1 = p[(l2 + zbase) & 0xFF] & 15
+        a2 = p[(k2 + zbase) & 0xFF] & 15
+        a3 = p[(m2 + zbase) & 0xFF] & 15
+        a4 = p[(j2 + zbase + 1) & 0xFF] & 15
+        a5 = p[(l2 + zbase + 1) & 0xFF] & 15
+        a6 = p[(k2 + zbase + 1) & 0xFF] & 15
+        a7 = p[(m2 + zbase + 1) & 0xFF] & 15
+
+        dx = xf[ni]
+        dz = zf[ni]
+        dx1 = dx - 1.0
+        dz1 = dz - 1.0
+
+        n0 = gx[a0] * dx + gy[a0] * yy + gz[a0] * dz
+        n1 = gx[a1] * dx1 + gy[a1] * yy + gz[a1] * dz
+        n2 = gx[a2] * dx + gy[a2] * yy1 + gz[a2] * dz
+        n3 = gx[a3] * dx1 + gy[a3] * yy1 + gz[a3] * dz
+        n4 = gx[a4] * dx + gy[a4] * yy + gz[a4] * dz1
+        n5 = gx[a5] * dx1 + gy[a5] * yy + gz[a5] * dz1
+        n6 = gx[a6] * dx + gy[a6] * yy1 + gz[a6] * dz1
+        n7 = gx[a7] * dx1 + gy[a7] * yy1 + gz[a7] * dz1
+
+        sx = dx * dx * dx * (dx * (dx * 6.0 - 15.0) + 10.0)
+        sz = dz * dz * dz * (dz * (dz * 6.0 - 15.0) + 10.0)
+
+        lo0 = n0 + sx * (n1 - n0)
+        lo1 = n2 + sx * (n3 - n2)
+        hi0 = n4 + sx * (n5 - n4)
+        hi1 = n6 + sx * (n7 - n6)
+        low = lo0 + sy * (lo1 - lo0)
+        high = hi0 + sy * (hi1 - hi0)
+        out[0, ni] = low + sz * (high - low)
+
 def separable(x, y, z, y_limit):
     """Return (xs, ys, zs, yl, out_shape) if the call fits the grid kernel."""
     def as_columns(v):
@@ -150,7 +220,13 @@ def sample_grid(noise, x, y, z, y_scale, y_limit):
     px = p[xi & 0xFF]
     px1 = p[(xi + 1) & 0xFF]
     out = np.empty((ys.shape[0], xs.shape[0]), dtype=np.float64)
-    improved_noise_grid(p, xi, xf, zi, zf, px, px1, np.ascontiguousarray(ys),
-                        float(noise.yo), float(y_scale), np.ascontiguousarray(yl),
-                        GRAD_X, GRAD_Y, GRAD_Z, out)
+    # one y row is a 2D noise, and the grid kernel would have nothing to spread
+    # over; below a few hundred columns the threads cost more than they save
+    if ys.shape[0] == 1 and xs.shape[0] >= 512:
+        improved_noise_row(p, xi, xf, zi, zf, px, px1, float(ys[0]), float(noise.yo),
+                           float(y_scale), float(yl[0]), GRAD_X, GRAD_Y, GRAD_Z, out)
+    else:
+        improved_noise_grid(p, xi, xf, zi, zf, px, px1, np.ascontiguousarray(ys),
+                            float(noise.yo), float(y_scale), np.ascontiguousarray(yl),
+                            GRAD_X, GRAD_Y, GRAD_Z, out)
     return out.reshape(out_shape) if out.shape != out_shape else out

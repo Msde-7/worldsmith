@@ -240,10 +240,11 @@ after generation and a render never shows them.
 | `tools/` | in-game verification, the deepslate oracle, block-colour extraction, the authoring scripts |
 
 Renders are fast because every purely 2D function is evaluated once per column
-rather than once per block, the Perlin inner loop is a parallel numba kernel, and
-terrain is sampled on the noise-cell lattice whenever the pack's `final_density`
-is rooted in an `interpolated` node, which makes that sampling exact. Anything
-else, vanilla included, falls back to an exact per-block scan.
+rather than once per block, the Perlin inner loop is a parallel numba kernel over
+whichever axis is the wide one, and terrain is sampled on the noise-cell lattice
+whenever the pack's `final_density` is rooted in an `interpolated` node, which
+makes that sampling exact. Anything else, vanilla included, falls back to an
+exact per-block scan.
 
 </details>
 
