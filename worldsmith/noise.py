@@ -28,6 +28,7 @@ _GY = np.ascontiguousarray(GRADIENT[:, 1])
 _GZ = np.ascontiguousarray(GRADIENT[:, 2])
 
 WRAP_PERIOD = 3.3554432e7
+WRAP_HALF = WRAP_PERIOD / 2.0
 
 # Turned off by the test that compares the numba kernel against the numpy path.
 USE_KERNEL = [True]
@@ -44,6 +45,12 @@ def lerp(t, a, b):
 
 
 def wrap(value):
+    # identity inside half a period, which is every ordinary coordinate
+    if isinstance(value, np.ndarray):
+        if value.size and value.min() >= -WRAP_HALF and value.max() < WRAP_HALF:
+            return value
+    elif -WRAP_HALF <= value < WRAP_HALF:
+        return value
     return value - np.floor(value / WRAP_PERIOD + 0.5) * WRAP_PERIOD
 
 
