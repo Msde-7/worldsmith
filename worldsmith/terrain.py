@@ -81,9 +81,28 @@ def lattice_y(world: World) -> np.ndarray:
     return world.noise.min_y + np.arange(n + 1) * ch
 
 
-def sample_density(world: World, node, x_flat, z_flat, y_levels, batch: int = 8192) -> np.ndarray:
+# columns x levels held at once while a node is evaluated. The kernels want a
+# wide array to spread over, and the intermediates are what limits how wide.
+BATCH_CELLS = 2_000_000
+
+
+def column_batch(levels: int, requested: int | None = None) -> int:
+    """How many columns to evaluate at once.
+
+    The other side of every intermediate is the number of y levels, so a lattice
+    sample with 49 of them can take far more columns per pass than a per-block
+    scan with 384. Never narrower than 8192, so the scan is left as it was.
+    """
+    if requested:
+        return requested
+    return max(8192, BATCH_CELLS // max(1, levels))
+
+
+def sample_density(world: World, node, x_flat, z_flat, y_levels,
+                   batch: int | None = None) -> np.ndarray:
     """Evaluate a node over a column grid. Returns (len(y_levels), N)."""
     y = np.asarray(y_levels, dtype=np.float64)[:, None]
+    batch = column_batch(y.shape[0], batch)
     n = x_flat.shape[1]
     out = np.empty((y.shape[0], n), dtype=np.float64)
     for start in range(0, n, batch):
@@ -254,7 +273,7 @@ def scan_surface(world: World, node, x_flat, z_flat, batch: int = 2048,
 
 
 def sample_terrain(world: World, x0: int, z0: int, nx: int, nz: int, step: int = 4,
-                   y_levels: np.ndarray | None = None, batch: int = 8192,
+                   y_levels: np.ndarray | None = None, batch: int | None = None,
                    sampling: str = "auto") -> Terrain:
     node = world.router["final_density"]
     prepare(node)

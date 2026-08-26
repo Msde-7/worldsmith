@@ -8,7 +8,7 @@ import numpy as np
 from .climate import BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
 from .surface import NO_WATER, SurfaceContext, SurfaceSystem
-from .terrain import Terrain, sample_terrain
+from .terrain import Terrain, column_batch, sample_terrain
 from .world import World
 
 
@@ -52,8 +52,10 @@ def biome_climate_table(world: World, biome_ids: list[str]) -> np.ndarray:
 
 def build_scene(world: World, biome_source: BiomeSource, x0: int, z0: int,
                 nx: int, nz: int, step: int = 4, preliminary: bool = True,
-                batch: int = 8192) -> Scene:
+                batch: int | None = None) -> Scene:
     terrain = sample_terrain(world, x0, z0, nx, nz, step, batch=batch)
+    # the passes below evaluate at one y, so they take the widest batch going
+    batch = column_batch(1, batch)
     n = nx * nz
     xs = np.repeat(terrain.xs[None, :], nz, axis=0).ravel().astype(np.int64)
     zs = np.repeat(terrain.zs[:, None], nx, axis=1).ravel().astype(np.int64)
