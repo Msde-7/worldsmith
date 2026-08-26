@@ -67,9 +67,7 @@ _GRASS_ANCHORS = [
 ]
 
 
-# The same points off vanilla's foliage colormap, which is the one leaves take.
-# Sampled the same way, and the grass anchors above come back out of grass.png
-# exactly, which is what says the lookup is right.
+# The same points off foliage.png, which is the colormap leaves take.
 _FOLIAGE_ANCHORS = [
     (0.00, 0.5, (96, 161, 123)),    # snowy
     (0.25, 0.8, (104, 164, 100)),   # taiga

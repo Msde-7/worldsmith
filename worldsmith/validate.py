@@ -419,8 +419,7 @@ class Validator:
         if stype == "multi_noise":
             entries = source.get("biomes")
             if not entries and "preset" in source:
-                # the entries behind a preset are Mojang's, so they are resolved
-                # to prove the pack will find biomes, and not audited further
+                # the entries behind a preset are Mojang's, so they are not audited
                 self.check_preset(where, str(source["preset"]))
             elif not isinstance(entries, list) or not entries:
                 self.add(ERROR, where, "multi_noise biome_source needs a non-empty 'biomes' list "

@@ -83,13 +83,11 @@ def _canopy_layer(scene: Scene):
     xs = np.repeat(scene.terrain.xs[None, :], nz, axis=0).astype(np.float64)
     zs = np.repeat(scene.terrain.zs[:, None], nx, axis=1).astype(np.float64)
     field = canopy_field(xs, zs, scene.world.seed)
-    # water columns already read as water, so the soil test is what keeps trees
-    # off bare rock and off the sea
+    # water columns already read as water, so this keeps trees off bare rock
     soil = np.array([name.split(":")[-1] in SOIL for name in scene.palette],
                     dtype=bool)[scene.surface_block]
     mask = soil & (field <= cover_cutoff(table.cover)[scene.biome_index])
-    # crowns and the gaps between them, and darker than the open ground it
-    # replaces, which is what makes a wood read as a wood from above
+    # crowns and the gaps between them, darker than the open ground
     mottle = 0.72 + 0.38 * canopy_mottle(xs, zs, scene.world.seed)
     return mask, np.array(colors, dtype=np.float64)[scene.biome_index] * mottle[..., None]
 

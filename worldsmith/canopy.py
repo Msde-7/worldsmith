@@ -1,20 +1,13 @@
 """How much canopy a biome would end up under, for the map view only.
 
-Features are placed by the game after generation, so a render shows bare ground:
-a jungle and a bare plateau come out the same shade of green, which is the one
-thing a screenshot of the same seed would never agree with.
+Features are placed by the game after generation, so a render shows bare ground
+and a jungle looks like a field. This reads the biome's own feature list,
+follows each placed feature to the tree it configures, and works out what
+fraction of the ground those trees cover and what colour their leaves are.
 
-This does not place trees. It reads the biome's own feature list, follows each
-placed feature to the tree it configures, and works out the fraction of ground
-those features are expected to cover and what colour their leaves are. The
-renderer stipples that fraction over the map with a smooth field, so a dark
-forest reads as closed canopy and a savanna as scattered.
-
-It is an estimate of cover, not a simulation of placement. The game's random
-source, its `would_survive` checks and its heightmaps are not consulted, and two
-worlds with the same cover get the same blobs in different places. Nothing here
-reaches the terrain, the block histogram or the in-game comparison: it is paint
-on the preview, and `--decorate` is what turns it on.
+It is an estimate of cover, not a placement: the game's random source and its
+would_survive checks are not run, and nothing here reaches the terrain, the
+histograms or the in-game comparison. `--decorate` turns it on.
 """
 from __future__ import annotations
 
@@ -23,11 +16,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-# a chunk is 16x16 columns, and feature counts are all per chunk
 CHUNK_COLUMNS = 256.0
 
-# Trees need something a sapling would survive on. The predicate that says so is
-# a block tag the engine does not carry, so this is the ground it stands for.
+# what a sapling would survive on, since the engine carries no block tags
 SOIL = {
     "grass_block", "dirt", "coarse_dirt", "rooted_dirt", "podzol", "mycelium",
     "moss_block", "pale_moss_block", "mud", "muddy_mangrove_roots", "farmland",
@@ -35,10 +26,8 @@ SOIL = {
 }
 
 
-# Leaves whose texture is greyscale in the jar and coloured by the biome at
-# runtime. Cherry, azalea and pale oak carry their own colour and are drawn as
-# extracted. Spruce and birch are tinted by a constant rather than by the
-# colormap, close enough to their biome's foliage colour to go in here.
+# greyscale in the jar, so the biome supplies the colour. Cherry, azalea and
+# pale oak carry their own. Spruce and birch take a constant, close enough.
 COLORMAPPED_LEAVES = {
     "oak_leaves", "dark_oak_leaves", "jungle_leaves", "acacia_leaves",
     "mangrove_leaves", "spruce_leaves", "birch_leaves",
@@ -171,8 +160,6 @@ def canopy_for(registries, biomes: list[str]) -> Canopy:
                 if tries <= 0.0:
                     continue
                 for share, radius, leaf in _trees(registries, placed.get("feature")):
-                    # a canopy is a disc of foliage, and one tree's worth of it
-                    # is that area over the chunk it was rolled for
                     area = math.pi * (radius + 0.5) ** 2
                     part = tries * share * area / CHUNK_COLUMNS
                     total += part

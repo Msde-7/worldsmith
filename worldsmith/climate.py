@@ -86,9 +86,8 @@ class BiomeSource:
             hi.append(offset)
             mins.append(lo)
             maxs.append(hi)
-        # a biome claims as many boxes as it likes, and vanilla's overworld gives
-        # some of them a hundred, so the entries are folded down to one index per
-        # biome. Everything downstream counts, colours and legends by biome.
+        # vanilla gives one biome up to a hundred boxes, and everything
+        # downstream counts and colours by biome, so fold them
         unique = list(dict.fromkeys(names))
         at = {name: i for i, name in enumerate(unique)}
         return cls(kind="multi_noise", biomes=unique,

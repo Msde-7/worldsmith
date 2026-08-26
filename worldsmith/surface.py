@@ -100,10 +100,7 @@ class SurfaceSystem:
                 i += random.next_int(5) + 1
                 if i < len(bands):
                     bands[i] = "minecraft:orange_terracotta"
-                # vanilla walks this with a for loop, so its own i++ runs on top
-                # of the step. Without it the bands come out half as far apart
-                # and every later draw is off, which moves the whole table.
-                i += 1
+                i += 1          # vanilla walks this with a for loop
             self._make_bands(random, bands, 1, "minecraft:yellow_terracotta")
             self._make_bands(random, bands, 2, "minecraft:brown_terracotta")
             self._make_bands(random, bands, 1, "minecraft:red_terracotta")

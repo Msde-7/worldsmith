@@ -54,7 +54,7 @@ def build_scene(world: World, biome_source: BiomeSource, x0: int, z0: int,
                 nx: int, nz: int, step: int = 4, preliminary: bool = True,
                 batch: int | None = None) -> Scene:
     terrain = sample_terrain(world, x0, z0, nx, nz, step, batch=batch)
-    # the passes below evaluate at one y, so they take the widest batch going
+    # the passes below evaluate at one y
     batch = column_batch(1, batch)
     n = nx * nz
     xs = np.repeat(terrain.xs[None, :], nz, axis=0).ravel().astype(np.int64)
@@ -85,26 +85,21 @@ def build_scene(world: World, biome_source: BiomeSource, x0: int, z0: int,
     else:
         min_surface = np.full(n, float(world.noise.min_y))
 
-    # `steep` looks one block either side of the column and asks for a 4 block
-    # step. It reads both axes, and the two comparisons run in opposite
-    # directions: rising in +z, or falling in +x. Reproducing only the z half
-    # marks 6.5% of a canyon world flat that the game builds as cliff.
+    # rising 4 blocks in +z, or falling 4 in +x, one block either side
     h = terrain.surface_y.astype(np.float64)
     z_lo = np.vstack([h[:1], h[:-1]])
     z_hi = np.vstack([h[1:], h[-1:]])
     x_lo = np.hstack([h[:, :1], h[:, :-1]])
     x_hi = np.hstack([h[:, 1:], h[:, -1:]])
     if step == 1:
-        # the game reads its own chunk, so a lookup off the edge is clamped back
-        # to the column itself rather than crossing into the neighbour
+        # the game reads its own chunk, so an edge lookup clamps to the column
         zc = ((z0 + np.arange(nz)) & 15)[:, None]
         xc = ((x0 + np.arange(nx)) & 15)[None, :]
         z_lo = np.where(zc == 0, h, z_lo)
         z_hi = np.where(zc == 15, h, z_hi)
         x_lo = np.where(xc == 0, h, x_lo)
         x_hi = np.where(xc == 15, h, x_hi)
-    # at step > 1 the neighbours are step blocks away, so scale the difference
-    # back to the 2-block baseline the rule is written against
+    # neighbours are step blocks apart, so scale back to a 2-block baseline
     scale = max(1, step)
     steep = ((z_hi - z_lo) / scale >= 4.0) | ((x_lo - x_hi) / scale >= 4.0)
 

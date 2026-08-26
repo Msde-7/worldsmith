@@ -5,11 +5,9 @@ is the eight gradient-dot gathers. numpy does those as fancy-index gathers over
 the whole (levels x columns) grid; numba does them as scalar loads in a parallel
 loop, which is roughly two orders of magnitude cheaper.
 
-There are two, differing only in which axis they hand to the threads. A 3D
-noise arrives as a whole column of y levels and is split over those. A 2D one
-arrives as a single row, which left the grid kernel nothing to spread and ran it
-on one core: those are most of the noises in a router and about half a render,
-so they get a kernel that is parallel over the columns instead.
+There are two, differing only in which axis they hand to the threads: a 3D noise
+is split over its y levels, a 2D one over its columns, since it has only one row
+and would otherwise run on a single core.
 
 The kernels only handle the separable layout the renderer uses, x and z varying
 along columns and y along rows. Anything else falls back to the numpy path in
@@ -101,14 +99,7 @@ def improved_noise_grid(p, xi, xf, zi, zf, px, px1, ys, yo, y_scale, y_limit,
 @njit(cache=True, parallel=True, fastmath=False, nogil=True)
 def improved_noise_row(p, xi, xf, zi, zf, px, px1, y, yo, y_scale, y_limit,
                        gx, gy, gz, out):
-    """out[0, n] = ImprovedNoise sample at (x[n], y, z[n]).
-
-    The grid kernel spreads its work over y, which is right for a 3D noise and
-    useless for a 2D one: those come in as a single row, so it ran on one core
-    however many the machine has. Every purely 2D noise takes this path instead,
-    parallel over the columns, with the y terms lifted clear of the loop. Same
-    arithmetic in the same order, so the two agree bit for bit.
-    """
+    """out[0, n] = ImprovedNoise sample at (x[n], y, z[n]), threaded over n."""
     n_count = xi.shape[0]
     yv = y + yo
     yfl = np.floor(yv)
@@ -221,7 +212,6 @@ def sample_grid(noise, x, y, z, y_scale, y_limit):
     px1 = p[(xi + 1) & 0xFF]
     out = np.empty((ys.shape[0], xs.shape[0]), dtype=np.float64)
     # one y row is a 2D noise, and the grid kernel would have nothing to spread
-    # over; below a few hundred columns the threads cost more than they save
     if ys.shape[0] == 1 and xs.shape[0] >= 512:
         improved_noise_row(p, xi, xf, zi, zf, px, px1, float(ys[0]), float(noise.yo),
                            float(y_scale), float(yl[0]), GRAD_X, GRAD_Y, GRAD_Z, out)

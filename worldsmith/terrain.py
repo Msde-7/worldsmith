@@ -81,18 +81,12 @@ def lattice_y(world: World) -> np.ndarray:
     return world.noise.min_y + np.arange(n + 1) * ch
 
 
-# columns x levels held at once while a node is evaluated. The kernels want a
-# wide array to spread over, and the intermediates are what limits how wide.
+# columns x levels held at once while a node is evaluated
 BATCH_CELLS = 2_000_000
 
 
 def column_batch(levels: int, requested: int | None = None) -> int:
-    """How many columns to evaluate at once.
-
-    The other side of every intermediate is the number of y levels, so a lattice
-    sample with 49 of them can take far more columns per pass than a per-block
-    scan with 384. Never narrower than 8192, so the scan is left as it was.
-    """
+    """Columns per pass, wider when there are fewer y levels to carry."""
     if requested:
         return requested
     return max(8192, BATCH_CELLS // max(1, levels))
