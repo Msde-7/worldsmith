@@ -236,6 +236,7 @@ def pointwise(x, y, z, y_limit):
         out.append(np.full(n, float(a)) if a.ndim == 0 else np.ascontiguousarray(a[0]))
     return out[0], out[1], out[2], (1, n)
 
+
 def separable(x, y, z, y_limit):
     """Return (xs, ys, zs, yl, out_shape) if the call fits the grid kernel."""
     def as_columns(v):
