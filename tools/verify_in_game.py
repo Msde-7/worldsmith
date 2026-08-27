@@ -1,8 +1,13 @@
 """Ground truth: generate a world with the real Minecraft server, then compare
-its stored heightmaps with what the worldsmith engine predicted.
+what it stored with what the worldsmith engine predicted.
+
+Two passes. The heightmaps say the terrain is the right shape. The surface
+blocks say the surface rules put the right thing on top of it, which is the half
+that used to go unmeasured: a pack can match the game column for column on
+height and still be banded and cliffed wrong.
 
 This is the only check that proves the whole chain: the datapack loads, the game
-accepts every field, and the terrain the engine drew is the terrain the game
+accepts every field, and the world the engine drew is the world the game
 builds.
 
     python tools/verify_in_game.py packs/basalt_spires
@@ -18,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import math
 import shutil
 import struct
 import subprocess
@@ -31,10 +37,16 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from worldsmith.climate import BiomeSource
 from worldsmith.play import RUNTIME, as_overworld, ensure_runtime
-from worldsmith.registry import Registries
+from worldsmith.registry import Pack, Registries
+from worldsmith.scene import build_scene
 from worldsmith.terrain import sample_terrain
 from worldsmith.world import World
+
+# the block pass builds a scene per chunk, so it looks at fewer than the
+# heightmap pass, which reads one array
+BLOCK_CHUNKS = 24
 
 TAG_END, TAG_BYTE, TAG_SHORT, TAG_INT, TAG_LONG = 0, 1, 2, 3, 4
 TAG_FLOAT, TAG_DOUBLE, TAG_BYTE_ARRAY, TAG_STRING = 5, 6, 7, 8
@@ -132,20 +144,59 @@ def read_region(path: Path) -> dict[tuple[int, int], dict]:
     return chunks
 
 
-def unpack_heightmap(packed: np.ndarray, bits: int = 9) -> np.ndarray:
-    """Heightmaps are 256 entries of `bits` bits packed into longs, without
-    straddling long boundaries (since 1.16)."""
+def unpack_longs(packed: np.ndarray, bits: int, count: int) -> np.ndarray:
+    """Entries of `bits` bits packed into longs without straddling them (1.16+).
+
+    Both heightmaps and section block states use this layout.
+    """
     per_long = 64 // bits
     mask = (1 << bits) - 1
-    values = np.zeros(256, dtype=np.int64)
+    values = np.zeros(count, dtype=np.int64)
     i = 0
     for word in packed.astype(np.uint64):
         for slot in range(per_long):
-            if i >= 256:
+            if i >= count:
                 break
             values[i] = (int(word) >> (slot * bits)) & mask
             i += 1
-    return values.reshape(16, 16)          # [z][x]
+    return values
+
+
+def unpack_heightmap(packed: np.ndarray, bits: int = 9) -> np.ndarray:
+    return unpack_longs(packed, bits, 256).reshape(16, 16)          # [z][x]
+
+
+def section_blocks(nbt, lo: int, hi: int) -> dict[int, np.ndarray]:
+    """{block y: (16, 16) of block names} over y in [lo, hi], indexed [z][x]."""
+    out: dict[int, np.ndarray] = {}
+    for section in nbt.get("sections") or []:
+        base = int(section.get("Y", 0)) * 16
+        if base > hi or base + 15 < lo:
+            continue
+        states = (section.get("block_states") or {})
+        palette = [str(entry.get("Name")) for entry in (states.get("palette") or [])]
+        if not palette:
+            continue
+        data = states.get("data")
+        if data is None or len(data) == 0:
+            index = np.zeros(4096, dtype=np.int64)
+        else:
+            bits = max(4, math.ceil(math.log2(len(palette))))
+            index = unpack_longs(np.asarray(data), bits, 4096)
+        names = np.array(palette, dtype=object)[index].reshape(16, 16, 16)   # [y][z][x]
+        for dy in range(16):
+            if lo <= base + dy <= hi:
+                out[base + dy] = names[dy]
+    return out
+
+
+def is_decorated(registries: Registries, pack: Pack) -> bool:
+    """Whether the pack's biomes place features, which land on top of the surface."""
+    for ident in pack.data["biome"]:
+        biome = registries.get("biome", ident) or {}
+        if any(step for step in (biome.get("features") or [])):
+            return True
+    return False
 
 
 def region_path(world_dir: Path) -> Path:
@@ -245,7 +296,14 @@ def run_server(java: Path, jar: Path, work: Path, pack: Path, seed: int,
 def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
     registries = Registries.load([str(pack)])
     dimension = registries.get("dimension", "minecraft:overworld")
-    engine = World.create(registries, (dimension.get("generator") or {})["settings"], seed)
+    generator = dimension.get("generator") or {}
+    engine = World.create(registries, generator["settings"], seed)
+    try:
+        source = BiomeSource.from_json(generator.get("biome_source") or {}, registries)
+    except ValueError as exc:
+        print(f"note: {exc}; skipping the surface block pass")
+        source = None
+    decorated = is_decorated(registries, Pack(pack))
 
     region_dir = region_path(world_dir)
     files = sorted(region_dir.glob("*.mca"))
@@ -253,8 +311,10 @@ def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
         raise SystemExit(f"no region files under {region_dir}")
 
     compared = skipped = total = exact = 0
+    block_chunks = block_seen = block_match = 0
     diffs: list[int] = []
     worst: list[tuple[int, int, int, int]] = []
+    block_worst: list[tuple] = []
     for path in files:
         chunks = read_region(path)
         # A chunk only carries its final heightmap once it reaches `full`.
@@ -283,6 +343,25 @@ def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
                 iz, ix = np.unravel_index(int(np.argmax(np.abs(delta))), delta.shape)
                 worst.append((cx * 16 + int(ix), cz * 16 + int(iz),
                               int(mine[iz, ix]), int(game[iz, ix])))
+
+            if source is not None and block_chunks < BLOCK_CHUNKS:
+                block_chunks += 1
+                tops = game - 1
+                layers = section_blocks(nbt, int(tops.min()), int(tops.max()))
+                scene = build_scene(engine, source, cx * 16, cz * 16, 16, 16, step=1)
+                ours = np.array(scene.palette, dtype=object)[scene.surface_block]
+                for iz in range(16):
+                    for ix in range(16):
+                        y = int(game[iz, ix]) - 1          # first non-solid, less one
+                        layer = layers.get(y)
+                        if layer is None or y < engine.sea_level:
+                            continue                        # the engine paints fluid below sea
+                        want, got = str(layer[iz, ix]), str(ours[iz, ix])
+                        block_seen += 1
+                        if want == got:
+                            block_match += 1
+                        elif len(block_worst) < 6:
+                            block_worst.append((cx * 16 + ix, cz * 16 + iz, y, got, want))
     if total == 0:
         raise SystemExit("no finished chunks with heightmaps in the generated region files")
 
@@ -300,7 +379,24 @@ def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
         print("worst columns (x, z, engine, game):")
         for entry in sorted(worst, key=lambda e: -abs(e[2] - e[3]))[:8]:
             print(f"    {entry}")
-    return 0 if exact / total > 0.99 else 1
+
+    blocks_ok = True
+    if block_seen:
+        rate = block_match / block_seen
+        print()
+        print(f"surface blocks   : {block_match} of {block_seen} ({rate * 100:.3f}%) "
+              f"over {block_chunks} chunks")
+        if decorated:
+            print("                   this pack places features, which the game puts on top of "
+                  "the surface and the engine never draws, so some of the gap is theirs")
+        else:
+            # the rules are deterministic, so anything short of agreement is a
+            # disagreement. Heights carry aquifer ties, blocks do not.
+            blocks_ok = rate > 0.999
+        for x, z, y, got, want in block_worst:
+            print(f"    ({x}, {z}) y={y}  engine {got}  game {want}")
+
+    return 0 if exact / total > 0.99 and blocks_ok else 1
 
 
 def stage(pack: Path, registries: Registries, dimension: str | None, work: Path) -> Path:

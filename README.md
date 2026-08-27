@@ -55,16 +55,24 @@ phrase actually means, and that mapping is what the skill carries.
 ## It really is the same terrain
 
 This only works if the picture can be trusted, so that gets measured rather than
-claimed. `tools/verify_in_game.py` runs a real Minecraft 26.2 server on the pack,
-reads the heightmaps back out of the region files, and compares them column by
-column.
+claimed. `tools/verify_in_game.py` runs a real Minecraft 26.2 server on the pack
+and compares what it wrote with what the engine drew, twice over: the heightmaps
+say the terrain is the right shape, and the surface blocks say the rules put the
+right thing on top of it.
 
 ```
 $ python tools/verify_in_game.py packs/basalt_spires
 columns compared : 331776
 exact matches    : 331776 (100.000%)
 max  |error|     : 0 blocks
+surface blocks   : 6125 of 6125 (100.000%) over 24 chunks
 ```
+
+The block half is newer than the rest, and it earned its place immediately: the
+surface rules were the one part of the chain nothing measured, and two of them
+were wrong. A pack can match the game column for column on height and still be
+banded and cliffed wrong, which is exactly what packs/red_canyons was doing at
+80% of its surface blocks.
 
 Same story on vanilla's own terrain, aquifers and all. 51,200 columns, 99.959%
 exact, mean error 0.002 blocks. Aquifers are the hard part, because the game
