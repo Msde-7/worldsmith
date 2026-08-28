@@ -161,7 +161,7 @@ def render_height(terrain: Terrain, scale: int = 4, contour_every: int = 16) -> 
         edge[:, 1:] |= (np.floor(h[:, 1:] / contour_every) != np.floor(h[:, :-1] / contour_every))
         rgb[edge] *= 0.7
 
-    sea = terrain.surface_y < terrain.sea_level
+    sea = terrain.submerged
     rgb[sea] = rgb[sea] * 0.55 + np.array([20, 40, 110]) * 0.45
     rgb[~valid] = [10, 10, 14]
     img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8), "RGB")

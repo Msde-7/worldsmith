@@ -431,22 +431,27 @@ def test_surface_blocks_against_the_game():
     world = World.create(registries, dimension["generator"]["settings"], golden["seed"])
     source = BiomeSource.from_json(dimension["generator"]["biome_source"], registries)
 
-    total = agree = 0
+    total = agree = waterline = 0
     worst = []
     for entry in golden["chunks"]:
         cx, cz = entry["chunk"]
         scene = build_scene(world, source, cx * 16, cz * 16, 16, 16, step=1)
         mine = np.array(scene.palette, dtype=object)[scene.surface_block]
-        for i, want in enumerate(entry["blocks"]):
+        for i, (want, top) in enumerate(zip(entry["blocks"], entry["tops"])):
+            if top < world.sea_level - 1:
+                continue
             z, x = divmod(i, 16)
             got = str(mine[z, x])
             total += 1
+            waterline += top == world.sea_level - 1
             if got == want:
                 agree += 1
             elif len(worst) < 4:
-                worst.append(f"({cx * 16 + x},{cz * 16 + z}) engine {got} game {want}")
+                worst.append(f"({cx * 16 + x},{cz * 16 + z}) y={top} engine {got} game {want}")
     check("the surface blocks are the game's surface blocks", agree == total,
           f"{agree}/{total} match; {'; '.join(worst)}")
+    # a column whose top block sits exactly at sea_level - 1 is dry, not submerged
+    check("the sample pins the waterline", waterline > 0, "no column at sea_level - 1")
 
 
 def test_clay_bands_against_the_game():

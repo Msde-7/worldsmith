@@ -50,14 +50,19 @@ class Terrain:
     def water_depth(self) -> np.ndarray:
         return np.maximum(0, self.sea_level - 1 - self.surface_y)
 
+    @property
+    def submerged(self) -> np.ndarray:
+        """Columns with water over them. The top water block is at sea_level - 1."""
+        return self.water_depth() > 0
+
     def stats(self) -> dict:
         solid = self.solid_anywhere
         s = self.surface_y[solid]
         if s.size == 0:
             return {"empty": True, "void_fraction": 1.0}
         # a column with no terrain at all is void, not ocean
-        land = solid & (self.surface_y >= self.sea_level)
-        water = solid & (self.surface_y < self.sea_level)
+        water = solid & self.submerged
+        land = solid & ~self.submerged
         return {
             "min_y": int(s.min()), "max_y": int(s.max()),
             "mean_y": float(s.mean()), "median_y": float(np.median(s)),

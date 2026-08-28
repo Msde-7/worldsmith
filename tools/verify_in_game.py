@@ -354,8 +354,8 @@ def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
                     for ix in range(16):
                         y = int(game[iz, ix]) - 1          # first non-solid, less one
                         layer = layers.get(y)
-                        if layer is None or y < engine.sea_level:
-                            continue                        # the engine paints fluid below sea
+                        if layer is None or y < engine.sea_level - 1:
+                            continue                        # the engine paints fluid under water
                         want, got = str(layer[iz, ix]), str(ours[iz, ix])
                         block_seen += 1
                         if want == got:

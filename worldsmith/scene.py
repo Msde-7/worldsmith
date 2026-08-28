@@ -70,7 +70,8 @@ def build_scene(world: World, biome_source: BiomeSource, x0: int, z0: int,
     secondary = np.asarray(system.secondary_noise.sample(xs.astype(float), 0.0, zs.astype(float)))
 
     sea = world.sea_level
-    water_height = np.where(surface_y < sea, sea, NO_WATER).astype(np.float64)
+    submerged = terrain.submerged.ravel()
+    water_height = np.where(submerged, sea, NO_WATER).astype(np.float64)
 
     if preliminary and world.router.get("preliminary_surface_level") is not None:
         node = world.router["preliminary_surface_level"]
@@ -125,9 +126,9 @@ def build_scene(world: World, biome_source: BiomeSource, x0: int, z0: int,
     )
     blocks = system.evaluate(ctx)
 
-    # columns below sea level show the fluid, not the block underneath
+    # columns under water show the fluid, not the block underneath
     fluid = system.block_index(world.default_fluid)
-    blocks = np.where(surface_y < sea, fluid, blocks)
+    blocks = np.where(submerged, fluid, blocks)
     # columns with no terrain at all are void
     air = system.block_index("minecraft:air")
     blocks = np.where(terrain.solid_anywhere.ravel(), blocks, air)
