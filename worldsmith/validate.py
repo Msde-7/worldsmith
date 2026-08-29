@@ -442,7 +442,7 @@ class Validator:
         if not entries:
             self.add(ERROR, where, f"no biome table is vendored for preset '{preset}', so the "
                                    "preview would have no biomes to place",
-                     "run python tools/extract_biome_parameters.py to read it out of the server jar")
+                     "run python tools/extract_worldgen_data.py to read it out of the server jar")
             return
         biomes = {str(e.get("biome")) for e in entries if isinstance(e, dict)}
         missing = sorted(b for b in biomes if not self.has("biome", b))

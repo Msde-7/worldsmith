@@ -256,13 +256,13 @@ def test_preset_biome_source():
 
     The table behind minecraft:overworld is assembled in Java, so mcmeta ships
     the preset name back as the whole file and worldsmith used to give up and
-    preview such a pack as bare terrain. tools/extract_biome_parameters.py reads
+    preview such a pack as bare terrain. tools/extract_worldgen_data.py reads
     the real one out of the server jar; this checks it is vendored and lands.
     """
     registries = Registries.load()
     table = registries.get("multi_noise_biome_source_parameter_list", "minecraft:overworld") or {}
     check("the overworld preset table is vendored", bool(table.get("biomes")),
-          "run python tools/extract_biome_parameters.py")
+          "run python tools/extract_worldgen_data.py")
     if not table.get("biomes"):
         return
     source = BiomeSource.from_json(

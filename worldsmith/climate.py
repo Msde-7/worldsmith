@@ -7,7 +7,7 @@ space, but overlapping boxes mean one of them silently never wins.
 
 A source can name a preset instead of listing entries, which is how a pack that
 starts from vanilla's overworld arrives. Those tables are vendored under
-multi_noise_biome_source_parameter_list by tools/extract_biome_parameters.py and
+multi_noise_biome_source_parameter_list by tools/extract_worldgen_data.py and
 they are large: 7594 entries where a hand-written pack has a dozen. That is why
 the search below streams over the entries instead of broadcasting against them,
 which at overworld size would ask for 28 GB.
@@ -103,7 +103,7 @@ def _preset_entries(preset: str, registries) -> list[dict]:
     Vanilla assembles these in Java, so mcmeta ships the name back as the whole
     file and there is nothing to read until the extractor has run.
     """
-    hint = "run tools/extract_biome_parameters.py to read it out of the server jar"
+    hint = "run tools/extract_worldgen_data.py to read it out of the server jar"
     if registries is None:
         raise ValueError(f"biome source uses preset {preset!r} and nothing was passed "
                          f"to resolve it against")
