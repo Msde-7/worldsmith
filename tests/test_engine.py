@@ -843,6 +843,65 @@ def test_structure_files():
           str(rotate_xz(0, 0, 4, 4, "CLOCKWISE_90")))
 
 
+def test_placement_geometry():
+    """The placement model is checked against a server by
+    tools/verify_placement.py; these are the parts that can be pinned without
+    one: one site per region, inside the spacing minus separation window, the
+    box a rotated build covers, and the exclusion zone."""
+    from worldsmith.pack import PackWriter
+    from worldsmith.placement import (Site, footprint, set_sites, site_rotation,
+                                      sites)
+    from worldsmith.registry import Registries
+    from worldsmith.structures import spread
+
+    placement = {"spacing": 8, "separation": 3, "salt": 12345}
+    found = sites(placement, seed=99, x0=0, z0=0, x1=8 * 16 * 4 - 1, z1=8 * 16 * 4 - 1)
+    check("one site per region", len(found) == 16, str(len(found)))
+    windows = {(s.chunk_x // 8, s.chunk_z // 8) for s in found}
+    check("the sites are one per region, not several in one",
+          len(windows) == len(found), f"{len(windows)} regions for {len(found)} sites")
+    offsets = [(s.chunk_x % 8, s.chunk_z % 8) for s in found]
+    check("every site is inside spacing minus separation",
+          all(0 <= a < 5 and 0 <= b < 5 for a, b in offsets), str(offsets[:4]))
+    check("the same seed gives the same sites",
+          [(s.chunk_x, s.chunk_z) for s in sites(placement, 99, 0, 0, 500, 500)]
+          == [(s.chunk_x, s.chunk_z) for s in sites(placement, 99, 0, 0, 500, 500)])
+    check("a different salt moves them",
+          [(s.chunk_x, s.chunk_z) for s in sites(dict(placement, salt=7), 99, 0, 0, 500, 500)]
+          != [(s.chunk_x, s.chunk_z) for s in found])
+
+    site = Site(2, 3)                       # anchored at block (32, 48)
+    check("an unturned build grows from its anchor",
+          footprint(site, 64, 64, "NONE") == (32, 48, 95, 111))
+    check("a quarter turn grows the other way",
+          footprint(site, 64, 64, "CLOCKWISE_90") == (-31, 48, 32, 111),
+          str(footprint(site, 64, 64, "CLOCKWISE_90")))
+    check("a half turn grows back and left",
+          footprint(site, 64, 64, "CLOCKWISE_180") == (-31, -15, 32, 48))
+    check("a one block build is its anchor whatever the turn",
+          all(footprint(site, 1, 1, r) == (32, 48, 32, 48)
+              for r in ("NONE", "CLOCKWISE_90", "CLOCKWISE_180", "COUNTERCLOCKWISE_90")))
+    check("the turn is stable for a site",
+          site_rotation(99, 2, 3) == site_rotation(99, 2, 3))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = PackWriter(Path(tmp) / "p", "test")
+        writer.mcmeta()
+        writer.add("structure_set", "test:wide", spread("test:a", spacing=8, separation=3, salt=1))
+        writer.add("structure_set", "test:near",
+                   spread("test:b", spacing=8, separation=3, salt=1,
+                          exclusion=("test:wide", 6)))
+        registries = Registries.load([writer.root], include_vanilla=False)
+        wide = set_sites(registries, "test:wide", 5, 0, 0, 2000, 2000)
+        near = set_sites(registries, "test:near", 5, 0, 0, 2000, 2000)
+        check("the same salt without an exclusion zone gives the same sites",
+              {(s.chunk_x, s.chunk_z) for s in wide} ==
+              {(s.chunk_x, s.chunk_z) for s in sites(
+                  {"spacing": 8, "separation": 3, "salt": 1}, 5, 0, 0, 2000, 2000)})
+        check("an exclusion zone clears the sites it covers", not near,
+              f"{len(near)} sites survived an exclusion of the same set")
+
+
 def main():
     test_kernel_matches_numpy()
     test_sampling_modes_agree()
@@ -867,6 +926,7 @@ def main():
     test_platform_paths()
     test_template_round_trip()
     test_structure_files()
+    test_placement_geometry()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)
