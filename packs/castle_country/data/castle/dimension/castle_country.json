@@ -1,0 +1,222 @@
+{
+  "type": "minecraft:overworld",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "castle:castle_country",
+    "biome_source": {
+      "type": "minecraft:multi_noise",
+      "biomes": [
+        {
+          "biome": "castle:sea",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -1.2,
+              -0.35
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              0.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "castle:shore",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.35,
+              -0.28
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              0.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "castle:crag",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.02,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              1.0
+            ],
+            "depth": [
+              0.0,
+              1.0
+            ],
+            "weirdness": [
+              0.34,
+              1.0
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "castle:oakwood",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              0.0,
+              1.0
+            ],
+            "continentalness": [
+              -0.28,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              -0.2
+            ],
+            "depth": [
+              0.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.34
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "castle:heath",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              0.0
+            ],
+            "continentalness": [
+              -0.28,
+              1.0
+            ],
+            "erosion": [
+              -1.0,
+              -0.2
+            ],
+            "depth": [
+              0.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.34
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "castle:oakwood",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              0.15,
+              1.0
+            ],
+            "continentalness": [
+              -0.28,
+              1.0
+            ],
+            "erosion": [
+              -0.2,
+              1.0
+            ],
+            "depth": [
+              0.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.34
+            ],
+            "offset": 0.0
+          }
+        },
+        {
+          "biome": "castle:downs",
+          "parameters": {
+            "temperature": [
+              -1.0,
+              1.0
+            ],
+            "humidity": [
+              -1.0,
+              0.15
+            ],
+            "continentalness": [
+              -0.28,
+              1.0
+            ],
+            "erosion": [
+              -0.2,
+              1.0
+            ],
+            "depth": [
+              0.0,
+              1.0
+            ],
+            "weirdness": [
+              -1.0,
+              0.34
+            ],
+            "offset": 0.0
+          }
+        }
+      ]
+    }
+  }
+}

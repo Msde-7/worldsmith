@@ -1,0 +1,42 @@
+{
+  "type": "minecraft:flat_cache",
+  "argument": {
+    "type": "minecraft:cache_2d",
+    "argument": {
+      "type": "minecraft:cache_2d",
+      "argument": {
+        "type": "minecraft:spline",
+        "spline": {
+          "coordinate": "castle:erosion",
+          "points": [
+            {
+              "location": -1.0,
+              "value": 0.115,
+              "derivative": 0.0
+            },
+            {
+              "location": -0.45,
+              "value": 0.06,
+              "derivative": 0.0
+            },
+            {
+              "location": 0.0,
+              "value": 0.02,
+              "derivative": 0.0
+            },
+            {
+              "location": 0.45,
+              "value": -0.005,
+              "derivative": 0.0
+            },
+            {
+              "location": 1.0,
+              "value": -0.02,
+              "derivative": 0.0
+            }
+          ]
+        }
+      }
+    }
+  }
+}

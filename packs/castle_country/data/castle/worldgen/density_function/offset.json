@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:add",
+  "argument1": "castle:base_offset",
+  "argument2": {
+    "type": "minecraft:mul",
+    "argument1": "castle:land_mask",
+    "argument2": {
+      "type": "minecraft:add",
+      "argument1": "castle:relief",
+      "argument2": {
+        "type": "minecraft:mul",
+        "argument1": "castle:crag_mask",
+        "argument2": 0.24
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "structures": [
+    {
+      "structure": "castle:great_castle",
+      "weight": 3
+    },
+    {
+      "structure": "castle:ruined_castle",
+      "weight": 2
+    }
+  ],
+  "placement": {
+    "type": "minecraft:random_spread",
+    "spacing": 24,
+    "separation": 10,
+    "salt": 51263611
+  }
+}

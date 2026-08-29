@@ -1,0 +1,18 @@
+{
+  "structures": [
+    {
+      "structure": "castle:tower_keep",
+      "weight": 1
+    }
+  ],
+  "placement": {
+    "type": "minecraft:random_spread",
+    "spacing": 13,
+    "separation": 6,
+    "salt": 90114377,
+    "exclusion_zone": {
+      "other_set": "castle:great_castles",
+      "chunk_count": 5
+    }
+  }
+}
