@@ -19,7 +19,7 @@ from .density import DENSITY_FIELDS, DENSITY_TYPES, LEGACY_TYPES, REQUIRED_FIELD
 from .registry import Pack, Registries
 from .surface import (SURFACE_CONDITION_FIELDS, SURFACE_CONDITION_OPTIONAL,
                       SURFACE_CONDITION_TYPES, SURFACE_RULE_TYPES)
-from .voxel import block_states, read_nbt
+from .voxel import block_states, data_version, read_nbt
 from .world import BUILTIN_NOISE, ROUTER_FIELDS, SETTINGS_REQUIRED
 
 def template_has_air(path) -> bool:
@@ -111,6 +111,7 @@ class Validator:
             self.check_template_pool(ident, obj)
         for ident, obj in scope.get("structure_set", {}).items():
             self.check_structure_set(ident, obj)
+        self.check_templates()
         return self.findings
 
     def check_mcmeta(self):
@@ -579,6 +580,66 @@ class Validator:
                                        "generation step (use [] for a bare terrain biome)")
             elif any(not isinstance(step, list) for step in features):
                 self.add(ERROR, where, "each entry of 'features' must itself be a list")
+
+    def check_templates(self):
+        """The .nbt files themselves. Nothing else reads them, and a template
+        the game cannot use is the quietest failure of the lot: the structure
+        still generates, with an empty box where the build should be."""
+        pack = self.pack
+        if pack is None:
+            return
+        used = set()
+        for pool in self.registries.data["template_pool"].values():
+            for entry in (pool or {}).get("elements") or []:
+                location = ((entry or {}).get("element") or {}).get("location")
+                if isinstance(location, str):
+                    used.add(location if ":" in location else "minecraft:" + location)
+
+        for ident, path in sorted(pack.templates.items()):
+            where = f"structure/{ident}"
+            try:
+                root = read_nbt(path)
+            except Exception as exc:
+                self.add(ERROR, where, f"is not a readable structure template ({exc})")
+                continue
+            size = [int(v) for v in (root.get("size") or [])]
+            if len(size) != 3 or any(v <= 0 for v in size):
+                self.add(ERROR, where, f"size {size or 'missing'} is not three positive numbers")
+                continue
+            if max(size[0], size[2]) > 128:
+                self.add(WARNING, where, f"{size[0]}x{size[2]} is wider than any build tested",
+                         "vanilla ships nothing above 48 and 64 is the largest measured here")
+
+            palette = root.get("palette") or []
+            if not palette:
+                self.add(ERROR, where, "has no palette")
+            for index, state in enumerate(palette):
+                self.check_block_state(f"{where} palette[{index}]", state, required=True)
+
+            blocks = root.get("blocks") or []
+            if not blocks:
+                self.add(WARNING, where, "places no blocks")
+            outside = bad_state = 0
+            for block in blocks:
+                pos = [int(v) for v in (block.get("pos") or [])]
+                if len(pos) != 3 or any(p < 0 or p >= size[i] for i, p in enumerate(pos)):
+                    outside += 1
+                if not 0 <= int(block.get("state", -1)) < len(palette):
+                    bad_state += 1
+            if outside:
+                self.add(ERROR, where, f"{outside} block(s) sit outside the declared size {size}")
+            if bad_state:
+                self.add(ERROR, where, f"{bad_state} block(s) point outside the palette")
+
+            found = root.get("DataVersion")
+            want = data_version(self.version)
+            if found != want:
+                level = ERROR if isinstance(found, int) and found > want else WARNING
+                self.add(level, where, f"DataVersion {found} against {self.version}'s {want}",
+                         "a template from a newer version cannot be read; an older one is "
+                         "upgraded, which may not be what the build looked like")
+            if ident not in used:
+                self.add(INFO, where, "no template pool refers to this build")
 
     def check_structure(self, ident, obj):
         """A build the game quietly never places is the failure this catches."""

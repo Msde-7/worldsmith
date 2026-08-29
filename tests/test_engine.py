@@ -1062,7 +1062,89 @@ def test_set_reports():
           Grid(3, 3, 3).standing_spot() is None)
 
 
+def test_template_validation():
+    """A template the game cannot use is quieter than a broken JSON file: the
+    structure still generates, and leaves an empty box where the build was."""
+    from worldsmith.pack import PackWriter
+    from worldsmith.registry import Registries
+    from worldsmith.structures import pool, spread, structure
+    from worldsmith.validate import Validator
+    from worldsmith.voxel import Grid, data_version, write_nbt
+
+    sound = {"size": [2, 2, 2], "entities": [],
+             "blocks": [{"state": 0, "pos": [0, 0, 0]}, {"state": 0, "pos": [1, 1, 1]}],
+             "palette": [{"Name": "minecraft:stone_bricks"}],
+             "DataVersion": data_version()}
+
+    def findings(template=None, *, wire=True, extra=None):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = PackWriter(Path(tmp) / "p", "test")
+            writer.mcmeta()
+            if template is None:
+                writer.add_template("test:hut", Grid(2, 2, 2))
+            else:
+                write_nbt(template, writer.root / "data/test/structure/hut.nbt")
+            if wire:
+                writer.add("structure", "test:hut", structure("test:hut", ["minecraft:plains"]))
+                writer.add("template_pool", "test:hut", pool("test:hut"))
+                writer.add("structure_set", "test:huts",
+                           spread("test:hut", spacing=8, separation=3, salt=1))
+            if extra:
+                extra(writer)
+            registries = Registries.load([writer.root])
+            found = Validator(registries, registries.packs[-1]).validate_pack()
+            return [f"{f.level} {f.where} {f.message}" for f in found]
+
+    check("a sound template is clean", findings(sound) == [], str(findings(sound)))
+
+    bad_block = dict(sound, palette=[{"Name": "minecraft:chain"}])   # renamed in 26.2
+    check("a block the version does not have is caught",
+          any("unknown block" in f for f in findings(bad_block)), str(findings(bad_block)))
+
+    bad_property = dict(sound, palette=[{"Name": "minecraft:oak_stairs",
+                                        "Properties": {"nonsense": "north"}}])
+    check("a property the block does not have is caught",
+          any("no property" in f for f in findings(bad_property)), str(findings(bad_property)))
+
+    outside = dict(sound, blocks=[{"state": 0, "pos": [0, 0, 0]}, {"state": 0, "pos": [9, 0, 0]}])
+    check("a block outside the declared size is caught",
+          any("outside the declared size" in f for f in findings(outside)), str(findings(outside)))
+
+    dangling = dict(sound, blocks=[{"state": 7, "pos": [0, 0, 0]}])
+    check("a block pointing outside the palette is caught",
+          any("outside the palette" in f for f in findings(dangling)), str(findings(dangling)))
+
+    newer = dict(sound, DataVersion=data_version() + 100)
+    check("a template from a newer version is an error",
+          any("DataVersion" in f and f.startswith("ERROR") for f in findings(newer)),
+          str(findings(newer)))
+    older = dict(sound, DataVersion=data_version() - 100)
+    check("a template from an older version is a warning",
+          any("DataVersion" in f and f.startswith("WARNING") for f in findings(older)),
+          str(findings(older)))
+
+    empty = dict(sound, blocks=[])
+    check("a template that places nothing is caught",
+          any("places no blocks" in f for f in findings(empty)), str(findings(empty)))
+
+    zero = dict(sound, size=[0, 2, 2])
+    check("a template with no size is caught",
+          any("three positive numbers" in f for f in findings(zero)), str(findings(zero)))
+
+    check("a template nothing refers to is worth a note",
+          any("no template pool refers" in f for f in findings(sound, wire=False)),
+          str(findings(sound, wire=False)))
+
+    def not_a_template(writer):
+        (writer.root / "data/test/structure/rubbish.nbt").write_bytes(b"not gzip at all")
+    check("a file that is not a template is caught",
+          any("not a readable structure template" in f
+              for f in findings(sound, extra=not_a_template)),
+          str(findings(sound, extra=not_a_template)))
+
+
 def main():
+
 
     test_kernel_matches_numpy()
     test_sampling_modes_agree()
@@ -1090,6 +1172,7 @@ def main():
     test_placement_geometry()
     test_structure_validation()
     test_set_reports()
+    test_template_validation()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)
