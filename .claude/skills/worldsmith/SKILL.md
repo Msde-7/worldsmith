@@ -1,6 +1,6 @@
 ---
 name: worldsmith
-description: Turn a description of a landscape into a working Minecraft worldgen datapack - density functions, splines, surface rules and biome placement - and iterate on it by rendering the terrain and looking at it. Use whenever someone asks for custom Minecraft terrain, a custom dimension, a custom overworld, "make me a world that...", or wants existing worldgen JSON changed, debugged or explained.
+description: Turn a description of a landscape or of a thing to build into a working Minecraft datapack - terrain from density functions, splines, surface rules and biome placement, and builds the game places from block templates - then iterate on either by rendering it and looking at the picture. Use whenever someone asks for custom Minecraft terrain, a custom dimension or overworld, or for a castle, tower, ruin, village or any other structure placed in a world, or wants existing worldgen or structure JSON changed, debugged or explained.
 ---
 
 # worldsmith
@@ -8,6 +8,10 @@ description: Turn a description of a landscape into a working Minecraft worldgen
 Write Minecraft terrain in JSON, render it, look at it, change it. The renderer
 is a bit-exact reimplementation of the game's worldgen, verified column-for-column
 against Minecraft itself, so what the image shows is what the game will build.
+
+There are two halves. Terrain is the one below; **builds** (castles, towers,
+anything made of blocks that the game places for you) are the section "The other
+half: building things", and they work on their own or together with terrain.
 
 Run every command from the root of the worldsmith checkout.
 
@@ -59,6 +63,83 @@ Things worth knowing:
 * Don't launch the game unless they asked you to; pass `--no-launch` otherwise.
 * `--pregen 0` skips pre-building if they just want it installed quickly.
 * Existing worlds are **replaced** by name, so pick `--name` deliberately.
+
+## The other half: building things
+
+Terrain and builds are separate halves and neither needs the other. A pack can
+be terrain only, builds only (a castle dropped into an ordinary vanilla world),
+or both. Read the reference before writing one:
+
+```
+python -m worldsmith.cli reference builds
+```
+
+A build is a box of blocks plus three JSON files, and `structures.add` writes
+all four. Put the geometry in a script under `tools/` and keep it there, so a
+build can be re-run and changed:
+
+```python
+from worldsmith import structures
+from worldsmith.pack import PackWriter
+from worldsmith.voxel import Grid
+
+grid = Grid(32, 24, 32)                       # x, y, z
+grid.fill(0, 0, 0, 31, 7, 31, "minecraft:stone")          # buried footing
+grid.fill(4, 8, 4, 27, 20, 27, "minecraft:stone_bricks")
+grid.fill(5, 9, 5, 26, 19, 26, "minecraft:air")           # air is what hollows it
+grid.set(15, 9, 27, "minecraft:oak_door[facing=south,half=lower,hinge=left]")
+grid.set(9, 9, 9, "minecraft:chest[facing=north]",
+         {"id": "minecraft:chest", "LootTable": "minecraft:chests/simple_dungeon"})
+
+writer = PackWriter("packs/keep", "a keep")
+writer.mcmeta()
+structures.add(writer, "keep:tower", grid, ["minecraft:plains", "minecraft:forest"],
+               sink=-9)                       # floor at y=8, so -(8+1)
+writer.add("structure_set", "keep:towers",
+           structures.spread("keep:tower", spacing=16, separation=7, salt=771223))
+```
+
+Then the same loop as terrain, with the same rule: **look at the picture**.
+
+```
+python -m worldsmith.cli build  packs/keep --id keep:tower --plan 8,14   # draw it
+python -m worldsmith.cli sites  packs/keep            # where it lands, on what ground
+python -m worldsmith.cli render packs/keep --builds   # those sites on the terrain
+python -m worldsmith.cli check  packs/keep            # the silent mistakes
+python -m worldsmith.cli play   packs/keep --spawn-at keep:tower
+```
+
+`sites` is the one to read carefully. It lists every site the game will
+consider, whether the biome check keeps it, and the ground under the footprint:
+height, relief and how much is under water. Relief over about 10 blocks means
+the build will sit in a hole or on a pedestal, and the fix is either a deeper
+buried footing, a biome list that only names flat biomes, or terrain that has
+more flat ground in it.
+
+What will bite, in order of how much time it costs:
+
+* **Air.** `structures.add` uses `legacy_single_pool_element` for you. If you
+  write the pool JSON yourself, use it too: the modern element throws air away
+  and every room comes out solid.
+* **Trees.** Features are placed after structures, so grass inside a build grows
+  a wood. Pave anything that should stay clear: gravel, cobblestone, stone and
+  `dirt_path` are not soil; `coarse_dirt` and `podzol` are.
+* **Height.** `sink` is `-(floor + 1)`. Bury several courses below the floor or
+  the build stands on a pillar of air on a slope.
+* **Big builds.** `terrain_adaptation` defaults to `beard_box`, which clears the
+  whole box. Anything wider than a house needs it.
+* **Block states.** They are checked against the real block list as you write
+  them, so a typo raises here rather than vanishing in game.
+
+After a world exists, check what the game actually did:
+
+```
+python -m worldsmith.cli inspect <world> --pack packs/keep --structure keep:tower --render out.png
+```
+
+It lists every placed build, and with `--pack` compares the placed blocks
+against the template block for block. Anything under about 99% that is not ore
+in the buried footing is worth reading.
 
 ## Before writing any JSON
 
@@ -178,7 +259,8 @@ how tall and how steep, `biomes` whether anything landed where you meant,
 
 `check` runs a schema validator (every density function type and field, dangling
 references, spline ordering, block ids and their properties, biome boxes that can
-never win) and then a smoke test that actually generates terrain and reports
+never win, and for builds: missing templates, pools that name nothing, a
+separation above its spacing, and biomes the dimension never places) and then a smoke test that actually generates terrain and reports
 whether anything was built at all. Fix every ERROR before rendering; the game
 rejects malformed worldgen silently and hands you a void world.
 
@@ -187,6 +269,7 @@ rejects malformed worldgen silently and hands you a void world.
 ```
 python tools/verify_in_game.py packs/<name>
 python tools/verify_in_game.py packs/<name> --sample 200    # quicker, one region
+python tools/verify_placement.py --size 64                  # the build placement model
 ```
 
 Runs a real Minecraft server on the pack and compares its stored heightmaps with
