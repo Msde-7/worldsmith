@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="python 3.10 plus">
   <img src="https://img.shields.io/badge/minecraft-26.2-62B47A" alt="minecraft 26.2">
-  <img src="https://img.shields.io/badge/tests-299%20passing-4C9A2A" alt="299 tests passing">
+  <img src="https://img.shields.io/badge/tests-301%20passing-4C9A2A" alt="301 tests passing">
   <img src="https://img.shields.io/badge/license-MIT-999999" alt="MIT license">
 </p>
 
@@ -186,9 +186,9 @@ worldsmith column  packs/mine --at 100 -200      # one column, top to bottom
 Run them as `python -m worldsmith.cli <command>` from the repository. `check` is
 the one to run before every render, because Minecraft rejects malformed worldgen
 silently at world creation and hands you a void world. The validator covers every
-node type and field, dangling references, spline ordering, block ids and
-properties, the mandatory router fields, biome tags, and biome boxes that can
-never win.
+node type and field, every surface rule condition and the keys it must carry,
+dangling references, spline ordering, block ids and properties, the mandatory
+router fields, biome tags, and biome boxes that can never win.
 
 <details>
 <summary><b>Caves, aquifers, and why they go together</b></summary>
@@ -282,7 +282,7 @@ read out the real one: 7594 boxes over 55 biomes, vendored like the rest.
 ## Tests
 
 ```bash
-python tests/run_all.py                              # 299 checks, no network
+python tests/run_all.py                              # 301 checks, no network
 python tools/verify_in_game.py packs/basalt_spires   # the real game, opt-in
 python tools/extract_block_colors.py                 # re-read block colours from the client jar
 python tools/extract_worldgen_data.py                # re-read the preset biome tables and the features

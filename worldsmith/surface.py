@@ -18,10 +18,25 @@ from .world import World
 NO_WATER = -(1 << 62)
 
 SURFACE_RULE_TYPES = {"block", "sequence", "condition"}
-SURFACE_CONDITION_TYPES = {
-    "above_preliminary_surface", "biome", "hole", "noise_threshold", "not",
-    "steep", "stone_depth", "temperature", "vertical_gradient", "water", "y_above",
+
+# Fields each condition accepts. Everything here is mandatory except what
+# SURFACE_CONDITION_OPTIONAL lists: the game refuses the whole pack over a
+# missing key, and ignores an unknown one.
+SURFACE_CONDITION_FIELDS: dict[str, tuple[str, ...]] = {
+    "above_preliminary_surface": (),
+    "biome": ("biome_is",),
+    "hole": (),
+    "noise_threshold": ("noise", "min_threshold", "max_threshold", "is_3d"),
+    "not": ("invert",),
+    "steep": (),
+    "stone_depth": ("offset", "surface_type", "add_surface_depth", "secondary_depth_range"),
+    "temperature": (),
+    "vertical_gradient": ("random_name", "true_at_and_below", "false_at_and_above"),
+    "water": ("offset", "surface_depth_multiplier", "add_stone_depth"),
+    "y_above": ("anchor", "surface_depth_multiplier", "add_stone_depth"),
 }
+SURFACE_CONDITION_OPTIONAL: dict[str, tuple[str, ...]] = {"noise_threshold": ("is_3d",)}
+SURFACE_CONDITION_TYPES = set(SURFACE_CONDITION_FIELDS)
 
 
 def vertical_anchor(obj, min_y: int, max_y: int) -> np.ndarray | int:

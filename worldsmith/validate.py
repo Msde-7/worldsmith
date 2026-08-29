@@ -19,7 +19,8 @@ from .climate import BiomeSource, unreachable_biomes
 from .colors import is_missing
 from .density import DENSITY_FIELDS, DENSITY_TYPES, REQUIRED_FIELDS
 from .registry import Pack, Registries
-from .surface import SURFACE_CONDITION_TYPES, SURFACE_RULE_TYPES
+from .surface import (SURFACE_CONDITION_FIELDS, SURFACE_CONDITION_OPTIONAL,
+                      SURFACE_CONDITION_TYPES, SURFACE_RULE_TYPES)
 from .world import BUILTIN_NOISE, ROUTER_FIELDS
 
 ERROR, WARNING, INFO = "ERROR", "WARNING", "INFO"
@@ -360,10 +361,22 @@ class Validator:
             self.add(ERROR, where, f"unknown surface condition '{raw}'",
                      f"did you mean '{close}'?" if close else None)
             return
-        if t == "not":
-            self.check_surface_condition(f"{where}/invert", cond.get("invert"), depth + 1)
-        if t == "biome":
-            biomes = cond.get("biome_is")
+        allowed = SURFACE_CONDITION_FIELDS[t]
+        optional = SURFACE_CONDITION_OPTIONAL.get(t, ())
+        for key in cond:
+            if key != "type" and key not in allowed:
+                close = _closest(key, allowed)
+                self.add(ERROR, where, f"'{t}' has no field '{key}'",
+                         f"did you mean '{close}'?" if close else f"allowed: {sorted(allowed) or 'none'}")
+        for key in allowed:
+            if key not in cond and key not in optional:
+                self.add(ERROR, where, f"'{t}' is missing required field '{key}'",
+                         "the game refuses the whole pack rather than defaulting it")
+
+        if t == "not" and "invert" in cond:
+            self.check_surface_condition(f"{where}/invert", cond["invert"], depth + 1)
+        if t == "biome" and "biome_is" in cond:
+            biomes = cond["biome_is"]
             if isinstance(biomes, str):
                 biomes = [biomes]
             if not isinstance(biomes, list) or not biomes:
@@ -383,8 +396,8 @@ class Validator:
             lo, hi = cond.get("min_threshold"), cond.get("max_threshold")
             if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo > hi:
                 self.add(ERROR, where, "min_threshold > max_threshold, so this is never true")
-        if t == "vertical_gradient" and not cond.get("random_name"):
-            self.add(ERROR, where, "vertical_gradient needs a 'random_name'")
+        if t == "vertical_gradient" and not cond.get("random_name", "x"):
+            self.add(ERROR, where, "'random_name' must be a non-empty string")
 
     def check_dimension(self, ident, obj):
         where = f"dimension/{ident}"

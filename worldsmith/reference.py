@@ -209,6 +209,9 @@ RULES
   bandlands  the badlands terracotta banding
 
 CONDITIONS
+  Every field below is mandatory, `is_3d` aside: the game refuses the whole
+  pack over a missing one rather than defaulting it.
+
   stone_depth   {offset, surface_type: floor|ceiling, add_surface_depth,
                  secondary_depth_range}
                 true within `offset+1` blocks of the top (floor) or bottom
