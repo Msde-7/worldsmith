@@ -138,7 +138,6 @@ SPECIAL
 
 REMOVED: initial_density_without_jaggedness and terrain_shaper no longer exist.
 weird_scaled_sampler is gone too: the game refuses a pack that names it.
-interval_select does the same job.
 """,
     "terrain": """HOW TERRAIN HEIGHT ACTUALLY WORKS
 =================================

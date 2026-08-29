@@ -169,7 +169,7 @@ class Validator:
             return
         if t in LEGACY_TYPES:
             self.add(ERROR, where, f"'{t}' is not a density function type in {self.version}",
-                     "the game refuses the whole pack; interval_select does the same job")
+                     "the game refuses the whole pack rather than ignoring the node")
         allowed = DENSITY_FIELDS.get(t, {})
         for key in obj:
             if key != "type" and key not in allowed:
@@ -270,11 +270,7 @@ class Validator:
                 self.add(ERROR, where, f"missing required field '{key}'",
                          "the game refuses the whole pack rather than defaulting it")
         noise = obj.get("noise")
-        if not isinstance(noise, dict):
-            if "noise" in obj:
-                self.add(ERROR, where, "'noise' must be an object with "
-                                       "min_y/height/size_horizontal/size_vertical")
-        else:
+        if isinstance(noise, dict):
             min_y = noise.get("min_y")
             height = noise.get("height")
             if not isinstance(min_y, int) or min_y % 16 != 0:
@@ -293,6 +289,9 @@ class Validator:
                 v = noise.get(key)
                 if not isinstance(v, int) or not (1 <= v <= 4):
                     self.add(ERROR, where, f"noise.{key} must be an integer 1..4 (got {v})")
+        elif "noise" in obj:
+            self.add(ERROR, where, "'noise' must be an object with "
+                                   "min_y/height/size_horizontal/size_vertical")
         sea = obj.get("sea_level")
         if isinstance(noise, dict) and isinstance(sea, int) and isinstance(noise.get("min_y"), int):
             top = noise["min_y"] + noise.get("height", 0)
@@ -304,10 +303,7 @@ class Validator:
         for key in ("default_block", "default_fluid"):
             self.check_block_state(f"{where}/{key}", obj.get(key))
         router = obj.get("noise_router")
-        if not isinstance(router, dict):
-            if "noise_router" in obj:
-                self.add(ERROR, where, "'noise_router' must be an object")
-        else:
+        if isinstance(router, dict):
             for key in router:
                 if key not in ROUTER_FIELDS:
                     close = _closest(key, ROUTER_FIELDS)
@@ -321,6 +317,8 @@ class Validator:
             for key, value in router.items():
                 if key in ROUTER_FIELDS:
                     self.check_density(f"{where}/noise_router/{key}", value, 0)
+        elif "noise_router" in obj:
+            self.add(ERROR, where, "'noise_router' must be an object")
         if "surface_rule" in obj:
             self.check_surface_rule(f"{where}/surface_rule", obj["surface_rule"])
 

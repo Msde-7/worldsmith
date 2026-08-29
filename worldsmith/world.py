@@ -19,7 +19,7 @@ ROUTER_FIELDS = (
     "preliminary_surface_level", "final_density", "vein_toggle", "vein_ridged", "vein_gap",
 )
 
-# Every top-level noise_settings key. The game defaults none of them.
+# Every top-level noise_settings key; the game requires all eleven.
 SETTINGS_REQUIRED = (
     "sea_level", "disable_mob_generation", "aquifers_enabled", "ore_veins_enabled",
     "legacy_random_source", "default_block", "default_fluid", "spawn_target",
