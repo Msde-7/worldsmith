@@ -18,6 +18,8 @@ import numpy as np
 
 from .climate import assign_biomes, climate_target
 from .jrandom import JavaRandom, to_signed64
+from .scene import build_scene
+from .structures import rotate_xz
 from .terrain import base_height, sample_terrain
 from .voxel import Grid
 
@@ -172,7 +174,8 @@ def set_sites(registries, set_id: str, seed: int, x0: int, z0: int, x1: int, z1:
 
 
 def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: int = 0,
-           size: tuple[int, int] = (1, 1), step: int = 8, build: str = "") -> list[SiteReport]:
+           size: tuple[int, int] = (1, 1), step: int = 8, build: str = "",
+           ground: bool = True) -> list[SiteReport]:
     """What the ground is like where each site landed, and whether the game will
     accept it.
 
@@ -196,15 +199,21 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
 
     xs = np.array([a[0] for a in anchors], dtype=np.int64)
     zs = np.array([a[1] for a in anchors], dtype=np.int64)
-    ground = base_height(world, xs, zs)
-    picks = assign_biomes(source, climate_target(world, xs, zs, ground + sink))
+    ground_at = base_height(world, xs, zs)
+    picks = assign_biomes(source, climate_target(world, xs, zs, ground_at + sink))
 
     reports = []
     for i, site in enumerate(found):
         rotation, box = boxes[i]
-        cells_x = max(2, (box[2] - box[0] + 1) // step)
-        cells_z = max(2, (box[3] - box[1] + 1) // step)
-        heights = sample_terrain(world, box[0], box[1], cells_x, cells_z, step=step).surface_y
+        if ground:
+            cells_x = max(2, (box[2] - box[0] + 1) // step)
+            cells_z = max(2, (box[3] - box[1] + 1) // step)
+            heights = sample_terrain(world, box[0], box[1], cells_x, cells_z,
+                                     step=step).surface_y
+        else:
+            # one sample_terrain per site is the whole cost of a survey, and a
+            # caller that only wants to know where the builds are does not need it
+            heights = np.full((1, 1), ground_at[i] - 1)
         biome = source.biomes[int(picks[i])] if source.biomes else ""
         reports.append(SiteReport(
             site=site,
@@ -212,8 +221,8 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
             rotation=rotation,
             box=box,
             biome=biome,
-            floor_y=int(ground[i]) + sink - 1,
-            surface_y=int(ground[i]) - 1,
+            floor_y=int(ground_at[i]) + sink - 1,
+            surface_y=int(ground_at[i]) - 1,
             low=int(heights.min()),
             high=int(heights.max()),
             water=float((heights < world.sea_level).mean()),
@@ -223,7 +232,8 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
 
 
 def set_reports(registries, world, source, set_id: str, seed: int,
-                x0: int, z0: int, x1: int, z1: int, step: int = 8) -> list[SiteReport]:
+                x0: int, z0: int, x1: int, z1: int, step: int = 8,
+                ground: bool = True) -> list[SiteReport]:
     """Every site of one structure set, surveyed as the build that will stand there.
 
     A set can hold builds of different sizes and different biome lists, and the
@@ -251,5 +261,73 @@ def set_reports(registries, world, source, set_id: str, seed: int,
         reports += survey(world, source, group, seed=seed,
                           biomes=None if isinstance(biomes, str) else biomes,
                           sink=int((structure.get("start_height") or {}).get("absolute", 0)),
-                          size=size, step=step, build=ident)
+                          size=size, step=step, build=ident, ground=ground)
     return sorted(reports, key=lambda r: (r.site.chunk_x, r.site.chunk_z))
+
+
+def build_on_site(registries, world, source, structure_id: str, seed: int,
+                  index: int = 0, margin: int = 16, reach: int = 4096):
+    """The build standing on the ground it will actually stand on.
+
+    Terrain is sampled around the site and the template is pasted into it at the
+    height the game will put it, so the picture is the two halves together
+    without generating a world. The ground the game will lay against the build
+    itself is not modelled, so this is the land before the build lands on it.
+    """
+    structure = registries.get("structure", structure_id)
+    if structure is None:
+        raise SystemExit(f"unknown structure {structure_id}")
+    owner = next((ident for ident in registries.ids("structure_set")
+                  if any(e.get("structure") == structure_id
+                         for e in (registries.get("structure_set", ident) or {}).get("structures") or [])),
+                 None)
+    if owner is None:
+        raise SystemExit(f"no structure set places {structure_id}")
+    kept: list[SiteReport] = []
+    span = 1024
+    while span <= reach and len(kept) <= index:
+        kept = [r for r in set_reports(registries, world, source, owner, seed,
+                                       -span, -span, span, span, ground=False)
+                if r.accepted and r.build == structure_id]
+        span *= 2
+    if not kept:
+        raise SystemExit(f"no site within {reach} blocks keeps {structure_id}")
+    kept.sort(key=lambda r: abs(r.site.x) + abs(r.site.z))
+    chosen = kept[min(index, len(kept) - 1)]
+
+    template = Grid.load(registries.templates[structure.get("start_pool", structure_id)])
+    # the ground was skipped while picking, so measure it for the one site chosen
+    report = survey(world, source, [chosen.site], seed=seed, build=structure_id,
+                    biomes=None if isinstance(structure.get("biomes"), str)
+                    else structure.get("biomes"),
+                    sink=int((structure.get("start_height") or {}).get("absolute", 0)),
+                    size=(template.sx, template.sz))[0]
+    x0, z0 = report.box[0] - margin, report.box[1] - margin
+    width = report.box[2] - report.box[0] + 1 + 2 * margin
+    depth = report.box[3] - report.box[1] + 1 + 2 * margin
+
+    scene = build_scene(world, source, x0, z0, width, depth, step=1)
+    heights = scene.terrain.surface_y
+    sea = world.sea_level
+    floor = report.floor_y
+    low = int(min(heights.min(), floor)) - 3
+    high = int(max(heights.max(), sea, floor + template.sy)) + 1
+
+    grid = Grid(width, high - low + 1, depth)
+    for iz in range(depth):
+        for ix in range(width):
+            top = int(heights[iz, ix])
+            surface = scene.palette[int(scene.surface_block[iz, ix])]
+            grid.fill(ix, 0, iz, ix, min(top, high) - low - 1, iz, "minecraft:stone")
+            if low <= top <= high:
+                grid.set(ix, top - low, iz, surface)
+            if top < sea:
+                grid.fill(ix, max(top + 1, low) - low, iz, sea - low, iz, "minecraft:water[level=0]")
+
+    for (tx, ty, tz), spec in template.items():
+        wx, wz = rotate_xz(tx, tz, template.sx, template.sz, report.rotation)
+        gx, gz = report.box[0] + wx - x0, report.box[1] + wz - z0
+        gy = floor + ty - low
+        if 0 <= gy < grid.sy:
+            grid.set(gx, gy, gz, spec)
+    return grid, report

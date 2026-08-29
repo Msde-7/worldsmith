@@ -1256,6 +1256,41 @@ def test_scaffold_with_build():
               str(structure["biomes"]))
 
 
+def test_build_on_site():
+    """The build drawn on the ground it will stand on: the template's blocks at
+    the height the game puts them, with the terrain under and around them."""
+    from worldsmith.climate import BiomeSource
+    from worldsmith.pack import scaffold
+    from worldsmith.placement import build_on_site
+    from worldsmith.registry import Registries
+    from worldsmith.voxel import Grid
+    from worldsmith.world import World
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "p"
+        scaffold(root, "demo", "demo", with_build=True)
+        registries = Registries.load([root])
+        world = World.create(registries, "demo:demo", 4242)
+        source = BiomeSource.from_json(
+            registries.get("dimension", "demo:demo")["generator"]["biome_source"], registries)
+        grid, report = build_on_site(registries, world, source, "demo:hut", 4242, margin=6)
+        template = Grid.load(registries.templates["demo:hut"])
+
+    check("the site is one the game would keep", report.accepted)
+    check("the box is the build's own size",
+          report.box[2] - report.box[0] + 1 == template.sx, str(report.box))
+    check("the drawing is the build plus its margin",
+          grid.sx == template.sx + 12 and grid.sz == template.sz + 12,
+          f"{grid.sx}x{grid.sz}")
+    names = {spec.split("[")[0] for _, spec in grid.items()}
+    check("the build's own blocks are in the drawing",
+          "minecraft:stone_bricks" in names and "minecraft:oak_planks" in names, str(names))
+    check("there is ground under it as well as the build",
+          "minecraft:stone" in names, str(names))
+    solid = sum(1 for _, spec in grid.items())
+    check("the drawing is not empty", solid > template.filled(), str(solid))
+
+
 def main():
 
 
@@ -1289,6 +1324,7 @@ def main():
     test_build_overlay_and_determinism()
     test_packed_longs()
     test_scaffold_with_build()
+    test_build_on_site()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

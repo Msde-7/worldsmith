@@ -21,7 +21,7 @@ from .climate import PARAM_NAMES, BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
 from .draw import mark_builds, render_iso, render_plan
 from .pack import export_zip, scaffold
-from .placement import Site, set_reports
+from .placement import Site, build_on_site, set_reports
 from .reference import reference_text
 from .registry import Registries
 from .render import contact_sheet, render_biomes, render_height, render_map, render_section
@@ -160,7 +160,7 @@ def _site_reports(args, world, source, x0, z0, span):
     reports = []
     for set_id in sorted(registries.packs[-1].data["structure_set"]):
         reports += set_reports(registries, world, source, set_id, args.seed,
-                               x0, z0, x0 + span - 1, z0 + span - 1)
+                               x0, z0, x0 + span - 1, z0 + span - 1, ground=False)
     return reports
 
 
@@ -414,7 +414,16 @@ def cmd_build(args):
 
     name = args.id.split(":")[-1].replace("/", "_")
     out = Path(args.out) if args.out else Path("renders") / f"{name}.png"
-    render_iso(grid, out, scale=args.scale, turn=args.turn, label=args.id)
+    label = args.id
+    if args.site is not None:
+        world, source, _ = _build_world(args, registries)
+        grid, report = build_on_site(registries, world, source, args.id, args.seed,
+                                     index=args.site, margin=args.margin)
+        label = (f"{args.id} at x {report.box[0]} z {report.box[1]}, floor y "
+                 f"{report.floor_y}, {report.biome.split(':')[-1]}, "
+                 f"{report.relief} blocks of relief")
+        print(f"  site {args.site}: {label}")
+    render_iso(grid, out, scale=args.scale, turn=args.turn, label=label)
     print(f"wrote {out}  ({grid.sx}x{grid.sy}x{grid.sz}, {grid.filled()} blocks)")
     if levels:
         plan = out.with_name(out.stem + "_plan.png")
@@ -636,6 +645,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--scale", type=int, default=6, help="pixels per block")
     p.add_argument("--turn", type=int, default=0, help="quarter turns to view from")
     p.add_argument("--plan", help="also draw plan slices at these heights, e.g. 10,17,24")
+    p.add_argument("--site", type=int, default=None,
+                   help="draw it standing on the ground of its Nth site, nearest first")
+    p.add_argument("--margin", type=int, default=16,
+                   help="blocks of terrain around it, with --site")
     p.set_defaults(func=cmd_build)
 
     p = sub.add_parser("sites", help="where the game will put this pack's builds")

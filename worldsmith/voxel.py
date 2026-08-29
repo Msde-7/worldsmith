@@ -249,6 +249,11 @@ class Grid:
         spec = self.get(x, y, z)
         return "" if spec is None else spec.split("[")[0].split(":")[-1]
 
+    def items(self):
+        """Every block this box sets, as ((x, y, z), spec)."""
+        for x, y, z in zip(*(axis.tolist() for axis in np.nonzero(self.cells))):
+            yield (x, y, z), self.palette[int(self.cells[x, y, z]) - 1]
+
     def fill(self, x0, y0, z0, x1, y1, z1, spec: str) -> None:
         value = self.id_of(spec)
         self.cells[max(0, min(x0, x1)):min(self.sx, max(x0, x1) + 1),
