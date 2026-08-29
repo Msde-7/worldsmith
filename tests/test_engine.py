@@ -902,6 +902,100 @@ def test_placement_geometry():
               f"{len(near)} sites survived an exclusion of the same set")
 
 
+def test_structure_validation():
+    """Every one of these loads into the game without a word and then never
+    places anything, which is exactly the failure check exists to catch."""
+    from worldsmith.pack import PackWriter
+    from worldsmith.registry import Registries
+    from worldsmith.structures import pool, spread, structure
+    from worldsmith.validate import Validator
+    from worldsmith.voxel import Grid
+
+    def findings(build_pack):
+        with tempfile.TemporaryDirectory() as tmp:
+            writer = PackWriter(Path(tmp) / "p", "test")
+            writer.mcmeta()
+            build_pack(writer)
+            registries = Registries.load([writer.root])
+            found = Validator(registries, registries.packs[-1]).validate_pack()
+            return [f"{f.level} {f.where} {f.message}" for f in found]
+
+    hollow = Grid(4, 4, 4)
+    hollow.fill(0, 0, 0, 3, 3, 3, "minecraft:stone_bricks")
+    hollow.fill(1, 1, 1, 2, 2, 2, "minecraft:air")
+
+    def good(writer):
+        writer.add_template("test:hut", hollow)
+        writer.add("structure", "test:hut", structure("test:hut", ["minecraft:plains"]))
+        writer.add("template_pool", "test:hut", pool("test:hut"))
+        writer.add("structure_set", "test:huts", spread("test:hut", spacing=8,
+                                                        separation=3, salt=1))
+    check("a sound pack of builds is clean", findings(good) == [], str(findings(good)))
+
+    def missing_pool(writer):
+        good(writer)
+        writer.add("structure", "test:hut", structure("test:nowhere", ["minecraft:plains"]))
+    check("a start_pool that does not exist is caught",
+          any("start_pool" in f for f in findings(missing_pool)), str(findings(missing_pool)))
+
+    def missing_template(writer):
+        good(writer)
+        writer.add("template_pool", "test:hut", pool("test:absent"))
+    check("a pool element with no template is caught",
+          any("no template" in f for f in findings(missing_template)),
+          str(findings(missing_template)))
+
+    def modern_element(writer):
+        good(writer)
+        broken = pool("test:hut")
+        broken["elements"][0]["element"]["element_type"] = "minecraft:single_pool_element"
+        writer.add("template_pool", "test:hut", broken)
+    check("the element type that throws air away is caught",
+          any("ignores the air" in f for f in findings(modern_element)),
+          str(findings(modern_element)))
+
+    def bad_spread(writer):
+        good(writer)
+        writer.add("structure_set", "test:huts", spread("test:hut", spacing=4,
+                                                        separation=9, salt=1))
+    check("separation at or above spacing is caught",
+          any("separation" in f for f in findings(bad_spread)), str(findings(bad_spread)))
+
+    def bad_exclusion(writer):
+        good(writer)
+        writer.add("structure_set", "test:huts",
+                   spread("test:hut", spacing=8, separation=3, salt=1,
+                          exclusion=("test:absent_set", 4)))
+    check("an exclusion zone naming nothing is caught",
+          any("exclusion_zone" in f for f in findings(bad_exclusion)),
+          str(findings(bad_exclusion)))
+
+    def no_biomes(writer):
+        good(writer)
+        writer.add("structure", "test:hut", structure("test:hut", []))
+    check("a structure with no biomes is caught",
+          any("biomes is empty" in f for f in findings(no_biomes)), str(findings(no_biomes)))
+
+    def bad_step(writer):
+        good(writer)
+        writer.add("structure", "test:hut",
+                   structure("test:hut", ["minecraft:plains"], step="whenever"))
+    check("a step the game does not have is caught",
+          any("generation step" in f for f in findings(bad_step)), str(findings(bad_step)))
+
+    def unplaced_biome(writer):
+        good(writer)
+        writer.add("structure", "test:hut", structure("test:hut", ["minecraft:end_barrens"]))
+        writer.add("dimension", "test:d", {
+            "type": "minecraft:overworld",
+            "generator": {"type": "minecraft:noise", "settings": "minecraft:overworld",
+                          "biome_source": {"type": "minecraft:fixed",
+                                           "biome": "minecraft:plains"}}})
+    check("a build keyed to a biome this dimension never places is caught",
+          any("none of these biomes are placed" in f for f in findings(unplaced_biome)),
+          str(findings(unplaced_biome)))
+
+
 def main():
     test_kernel_matches_numpy()
     test_sampling_modes_agree()
@@ -927,6 +1021,7 @@ def main():
     test_template_round_trip()
     test_structure_files()
     test_placement_geometry()
+    test_structure_validation()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

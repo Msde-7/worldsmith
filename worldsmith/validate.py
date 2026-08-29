@@ -19,10 +19,30 @@ from .density import DENSITY_FIELDS, DENSITY_TYPES, LEGACY_TYPES, REQUIRED_FIELD
 from .registry import Pack, Registries
 from .surface import (SURFACE_CONDITION_FIELDS, SURFACE_CONDITION_OPTIONAL,
                       SURFACE_CONDITION_TYPES, SURFACE_RULE_TYPES)
-from .voxel import block_states
+from .voxel import block_states, read_nbt
 from .world import BUILTIN_NOISE, ROUTER_FIELDS, SETTINGS_REQUIRED
 
+def template_has_air(path) -> bool:
+    """Whether a template places air, which the modern pool element throws away."""
+    try:
+        root = read_nbt(path)
+    except Exception:
+        return False
+    return any(str(state.get("Name")) == "minecraft:air" for state in root.get("palette") or [])
+
+
 ERROR, WARNING, INFO = "ERROR", "WARNING", "INFO"
+
+GENERATION_STEPS = ("raw_generation", "lakes", "local_modifications",
+                    "underground_structures", "surface_structures", "strongholds",
+                    "underground_ores", "underground_decoration", "fluid_springs",
+                    "vegetal_decoration", "top_layer_modification")
+TERRAIN_ADAPTATIONS = ("none", "beard_thin", "beard_box", "bury", "encapsulate")
+HEIGHTMAPS = ("WORLD_SURFACE_WG", "WORLD_SURFACE", "OCEAN_FLOOR_WG", "OCEAN_FLOOR",
+              "MOTION_BLOCKING", "MOTION_BLOCKING_NO_LEAVES")
+POOL_ELEMENT_TYPES = ("minecraft:single_pool_element", "minecraft:legacy_single_pool_element",
+                      "minecraft:list_pool_element", "minecraft:feature_pool_element",
+                      "minecraft:empty_pool_element")
 
 # 26.2 = pack_format 107. Anything older than 1.18 (format 8) has no
 # data-driven worldgen at all.
@@ -52,6 +72,7 @@ class Validator:
         self.version = version
         self.findings: list[Finding] = []
         self.block_ids, self.block_properties = block_states(version)
+        self._placed_biomes = False
 
     def add(self, level, where, message, hint=None):
         self.findings.append(Finding(level, where, message, hint))
@@ -84,6 +105,12 @@ class Validator:
             self.check_biome(ident, obj)
         for ident, obj in scope.get("biome_tag", {}).items():
             self.check_biome_tag(ident, obj)
+        for ident, obj in scope.get("structure", {}).items():
+            self.check_structure(ident, obj)
+        for ident, obj in scope.get("template_pool", {}).items():
+            self.check_template_pool(ident, obj)
+        for ident, obj in scope.get("structure_set", {}).items():
+            self.check_structure_set(ident, obj)
         return self.findings
 
     def check_mcmeta(self):
@@ -552,6 +579,123 @@ class Validator:
                                        "generation step (use [] for a bare terrain biome)")
             elif any(not isinstance(step, list) for step in features):
                 self.add(ERROR, where, "each entry of 'features' must itself be a list")
+
+    def check_structure(self, ident, obj):
+        """A build the game quietly never places is the failure this catches."""
+        where = f"worldgen/structure/{ident}"
+        kind = obj.get("type")
+        if kind != "minecraft:jigsaw":
+            return                                    # only jigsaw is modelled
+        for key in ("start_pool", "size", "start_height", "biomes", "step"):
+            if key not in obj:
+                self.add(ERROR, where, f"no {key}",
+                         "a jigsaw structure needs start_pool, size, start_height, "
+                         "biomes and step")
+        pool = obj.get("start_pool")
+        if isinstance(pool, str) and not self.has("template_pool", pool):
+            self.add(ERROR, where, f"start_pool {pool} does not exist",
+                     f"add worldgen/template_pool/{pool.split(':')[-1]}.json")
+        step = obj.get("step")
+        if step is not None and step not in GENERATION_STEPS:
+            self.add(ERROR, where, f"step {step!r} is not a generation step",
+                     f"one of {', '.join(GENERATION_STEPS)}")
+        adaptation = obj.get("terrain_adaptation")
+        if adaptation is not None and adaptation not in TERRAIN_ADAPTATIONS:
+            self.add(ERROR, where, f"terrain_adaptation {adaptation!r} is not known",
+                     f"one of {', '.join(TERRAIN_ADAPTATIONS)}")
+        heightmap = obj.get("project_start_to_heightmap")
+        if heightmap is not None and heightmap not in HEIGHTMAPS:
+            self.add(ERROR, where, f"project_start_to_heightmap {heightmap!r} is not known",
+                     f"one of {', '.join(HEIGHTMAPS)}")
+        self.check_structure_biomes(where, obj.get("biomes"))
+
+    def check_structure_biomes(self, where, biomes):
+        if isinstance(biomes, str):
+            if biomes.startswith("#"):
+                return                               # a tag, resolved by the game
+            biomes = [biomes]
+        if not isinstance(biomes, list) or not biomes:
+            self.add(ERROR, where, "biomes is empty",
+                     "a structure with no biomes never generates anywhere")
+            return
+        missing = [b for b in biomes if isinstance(b, str) and not self.has("biome", b)]
+        if missing:
+            self.add(ERROR, where, f"biomes names {', '.join(missing)}, which do not exist")
+        placed = self.placed_biomes()
+        if placed is not None and not (set(biomes) & placed):
+            self.add(WARNING, where,
+                     "none of these biomes are placed by this pack's dimension",
+                     "the build will never generate here; either name a biome the "
+                     "biome source can produce, or leave it for another world")
+
+    def placed_biomes(self):
+        """Every biome this pack's own dimension can produce, or None if it has none."""
+        if self._placed_biomes is not False:
+            return self._placed_biomes
+        self._placed_biomes = None
+        for ident, dimension in (self.pack.data["dimension"] if self.pack else {}).items():
+            source = (dimension.get("generator") or {}).get("biome_source") or {}
+            try:
+                self._placed_biomes = set(BiomeSource.from_json(source, self.registries).biomes)
+            except ValueError:
+                self._placed_biomes = None
+        return self._placed_biomes
+
+    def check_template_pool(self, ident, obj):
+        where = f"worldgen/template_pool/{ident}"
+        elements = obj.get("elements")
+        if not isinstance(elements, list) or not elements:
+            self.add(ERROR, where, "no elements", "a pool with no elements places nothing")
+            return
+        for index, entry in enumerate(elements):
+            element = (entry or {}).get("element") or {}
+            kind = element.get("element_type")
+            location = element.get("location")
+            spot = f"{where}[{index}]"
+            if kind not in POOL_ELEMENT_TYPES:
+                self.add(ERROR, spot, f"element_type {kind!r} is not known",
+                         f"one of {', '.join(POOL_ELEMENT_TYPES)}")
+            if element.get("projection") not in ("rigid", "terrain_matching", None):
+                self.add(ERROR, spot, f"projection {element.get('projection')!r} is not known",
+                         "rigid or terrain_matching")
+            if kind in ("minecraft:single_pool_element", "minecraft:legacy_single_pool_element"):
+                if not isinstance(location, str):
+                    self.add(ERROR, spot, "no location", "the id of a template .nbt")
+                    continue
+                path = self.registries.templates.get(location)
+                if path is None:
+                    self.add(ERROR, spot, f"no template {location}",
+                             f"expected data/{location.split(':')[0]}/structure/"
+                             f"{location.split(':')[-1]}.nbt")
+                elif kind == "minecraft:single_pool_element" and template_has_air(path):
+                    self.add(WARNING, spot,
+                             "single_pool_element ignores the air in this template",
+                             "use legacy_single_pool_element, or the rooms it hollows "
+                             "out and anything it digs will be left solid")
+
+    def check_structure_set(self, ident, obj):
+        where = f"worldgen/structure_set/{ident}"
+        for entry in obj.get("structures") or []:
+            structure = (entry or {}).get("structure")
+            if isinstance(structure, str) and not self.has("structure", structure):
+                self.add(ERROR, where, f"structure {structure} does not exist")
+        if not obj.get("structures"):
+            self.add(ERROR, where, "no structures", "a set with no structures places nothing")
+        placement = obj.get("placement") or {}
+        if placement.get("type") != "minecraft:random_spread":
+            return
+        spacing = placement.get("spacing")
+        separation = placement.get("separation")
+        if not isinstance(spacing, int) or not isinstance(separation, int):
+            self.add(ERROR, where, "spacing and separation must both be given, in chunks")
+            return
+        if separation >= spacing:
+            self.add(ERROR, where, f"separation {separation} is not below spacing {spacing}",
+                     "the game divides by spacing minus separation")
+        zone = placement.get("exclusion_zone")
+        if zone and not self.has("structure_set", zone.get("other_set", "")):
+            self.add(ERROR, where,
+                     f"exclusion_zone names {zone.get('other_set')}, which does not exist")
 
     def check_biome_tag(self, ident, obj):
         """A biome tag is how a structure finds its biomes.
