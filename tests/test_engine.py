@@ -1143,6 +1143,86 @@ def test_template_validation():
           str(findings(sound, extra=not_a_template)))
 
 
+def test_build_overlay_and_determinism():
+    """Two small promises: the same build writes the same bytes, so rebuilding a
+    pack does not churn the diff, and the overlay draws a build's box where the
+    build actually is, in map pixels rather than blocks."""
+    from PIL import Image
+
+    from worldsmith.draw import KEPT, REJECTED, mark_builds
+    from worldsmith.placement import Site, SiteReport
+    from worldsmith.voxel import Grid
+
+    def make():
+        grid = Grid(3, 2, 3)
+        grid.fill(0, 0, 0, 2, 0, 2, "minecraft:stone_bricks")
+        grid.set(1, 1, 1, "minecraft:chest[facing=north]",
+                 {"id": "minecraft:chest", "LootTable": "minecraft:chests/simple_dungeon"})
+        return grid
+
+    with tempfile.TemporaryDirectory() as tmp:
+        first = make().save(Path(tmp) / "a.nbt").read_bytes()
+        second = make().save(Path(tmp) / "b.nbt").read_bytes()
+    check("the same build writes the same bytes", first == second,
+          f"{len(first)} vs {len(second)}")
+
+    def report(box, accepted):
+        return SiteReport(site=Site(0, 0), build="test:b", rotation="NONE", box=box,
+                          biome="minecraft:plains", floor_y=64, surface_y=64,
+                          low=64, high=64, water=0.0, accepted=accepted)
+
+    # a 256 block map drawn at 4 blocks per pixel and 2 pixels per cell
+    image = Image.new("RGB", (128, 128), (0, 0, 0))
+    mark_builds(image, [report((64, 32, 95, 63), True)], x0=0, z0=0, step=4, scale=2)
+    pixels = image.load()
+    check("the overlay draws the box where the build is",
+          pixels[32, 16] == KEPT and pixels[47, 31] == KEPT,
+          f"{pixels[32, 16]} {pixels[47, 31]}")
+    check("the overlay leaves the middle of the box alone",
+          pixels[40, 24] == (0, 0, 0), str(pixels[40, 24]))
+    check("the overlay leaves the rest of the map alone",
+          pixels[10, 10] == (0, 0, 0) and pixels[100, 100] == (0, 0, 0))
+
+    faint = Image.new("RGB", (128, 128), (0, 0, 0))
+    mark_builds(faint, [report((64, 32, 95, 63), False)], x0=0, z0=0, step=4, scale=2)
+    check("a rejected site is drawn differently", faint.load()[32, 16] == REJECTED,
+          str(faint.load()[32, 16]))
+
+    off = Image.new("RGB", (128, 128), (0, 0, 0))
+    mark_builds(off, [report((-900, -900, -800, -800), True)], x0=0, z0=0, step=4, scale=2)
+    check("a build off the map is not drawn", off.getbbox() is None)
+
+
+def test_packed_longs():
+    """Block states, biomes and heightmaps are all read through unpack_longs, so
+    it is checked against the plain loop it replaced, at every width the game
+    uses and across the sign boundary."""
+    from worldsmith.anvil import unpack_longs
+
+    def plain(packed, bits, count):
+        per_long, mask = 64 // bits, (1 << bits) - 1
+        out, i = [], 0
+        for word in np.asarray(packed).astype(np.uint64):
+            for slot in range(per_long):
+                if i >= count:
+                    break
+                out.append((int(word) >> (slot * bits)) & mask)
+                i += 1
+        return np.array(out, dtype=np.int64)
+
+    rng = np.random.default_rng(11)
+    agreed = 0
+    for bits in (1, 2, 3, 4, 5, 6, 7, 9, 12, 15):
+        for count in (64, 256, 4096):
+            words = rng.integers(-(2 ** 63), 2 ** 63 - 1,
+                                 (count + 64 // bits - 1) // (64 // bits), dtype=np.int64)
+            agreed += int(np.array_equal(unpack_longs(words, bits, count),
+                                         plain(words, bits, count)))
+    check("unpacking agrees with the plain loop at every width", agreed == 30, str(agreed))
+    check("a section of 4 bit states unpacks to 4096 entries",
+          len(unpack_longs(np.zeros(256, dtype=np.int64), 4, 4096)) == 4096)
+
+
 def main():
 
 
@@ -1173,6 +1253,8 @@ def main():
     test_structure_validation()
     test_set_reports()
     test_template_validation()
+    test_build_overlay_and_determinism()
+    test_packed_longs()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

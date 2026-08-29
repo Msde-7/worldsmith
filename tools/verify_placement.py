@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
 from worldsmith import play as play_mod, structures                    # noqa: E402
-from worldsmith.anvil import read_world                                # noqa: E402
+from worldsmith.anvil import read_box, read_world                                # noqa: E402
 from worldsmith.climate import BiomeSource                             # noqa: E402
 from worldsmith.pack import PackWriter                                 # noqa: E402
 from worldsmith.placement import set_sites, survey                     # noqa: E402
@@ -47,7 +47,8 @@ BIOMES = ["minecraft:plains", "minecraft:forest", "minecraft:birch_forest",
           "minecraft:swamp"]
 
 
-def build_probe(root: Path, size: int, spacing: int, separation: int) -> int:
+def build_probe(root: Path, size: int, spacing: int, separation: int,
+                spread_type: str = "linear") -> int:
     """A build of `size` blocks square, one block tall, sunk to sit on the ground."""
     if root.exists():
         shutil.rmtree(root)
@@ -57,10 +58,28 @@ def build_probe(root: Path, size: int, spacing: int, separation: int) -> int:
     grid.fill(0, 0, 0, size - 1, 0, size - 1, "minecraft:gold_block")
     sink = -1
     structures.add(writer, BUILD, grid, BIOMES, sink=sink)
-    writer.add("structure_set", SET,
-               structures.spread(BUILD, spacing=spacing, separation=separation,
-                                 salt=770193))
+    placement = structures.spread(BUILD, spacing=spacing, separation=separation, salt=770193)
+    placement["placement"]["spread_type"] = spread_type
+    writer.add("structure_set", SET, placement)
     return sink
+
+
+def check_blocks(world: Path, reports, size: int, sink: int) -> None:
+    """Placement is only half the claim. This is the other half: the blocks the
+    build is made of, where the model says they will be."""
+    kept = [r for r in reports if r.accepted]
+    if not kept:
+        print("  no build to read back")
+        return
+    report = min(kept, key=lambda r: abs(r.box[0]) + abs(r.box[1]))
+    x0, z0, x1, z1 = report.box
+    grid = read_box(world, x0, z0, x1, z1, report.floor_y - 1, report.floor_y + 2)
+    gold = sum(1 for x in range(grid.sx) for y in range(grid.sy) for z in range(grid.sz)
+               if grid.name_at(x, y, z) == "gold_block")
+    at_floor = sum(1 for x in range(grid.sx) for z in range(grid.sz)
+                   if grid.name_at(x, 1, z) == "gold_block")
+    print(f"  read back the build at x {x0} z {z0}, floor y {report.floor_y}: "
+          f"{at_floor}/{size * size} blocks on the floor, {gold} in the box")
 
 
 def compare(pack: Path, world: Path, seed: int, sink: int, size: int) -> int:
@@ -84,6 +103,7 @@ def compare(pack: Path, world: Path, seed: int, sink: int, size: int) -> int:
              if (s.chunk_x, s.chunk_z) in evaluated]
     reports = survey(model, source, found, seed=seed, biomes=BIOMES, sink=sink,
                      size=(size, size), step=8)
+    check_blocks(world, reports, size, sink)
 
     predicted = {(r.site.chunk_x, r.site.chunk_z) for r in reports if r.accepted}
     missed = sorted(built - predicted)
@@ -117,15 +137,17 @@ def main() -> int:
     parser.add_argument("--separation", type=int, default=1)
     parser.add_argument("--radius", type=int, default=384)
     parser.add_argument("--pregen", type=int, default=120)
+    parser.add_argument("--spread-type", default="linear", choices=("linear", "triangular"))
     parser.add_argument("--reuse", action="store_true", help="skip building the world")
     args = parser.parse_args()
 
     pack = ROOT / "packs" / "_placement_probe"
     work = play_mod.RUNTIME / "verify" / "placement"
-    sink = build_probe(pack, args.size, args.spacing, args.separation)
+    sink = build_probe(pack, args.size, args.spacing, args.separation,
+                       args.spread_type)
     if not args.reuse:
-        print(f"probing with a {args.size}x{args.size} build, spacing {args.spacing}, "
-              f"separation {args.separation}, seed {args.seed}")
+        print(f"probing with a {args.size}x{args.size} build, {args.spread_type} spread "
+              f"{args.spacing}/{args.separation}, seed {args.seed}")
         runtime = play_mod.ensure_runtime("26.2")
         if work.exists():
             shutil.rmtree(work, ignore_errors=True)

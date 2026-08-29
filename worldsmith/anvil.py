@@ -60,19 +60,13 @@ def read_world(world: Path):
 def unpack_longs(packed: np.ndarray, bits: int, count: int) -> np.ndarray:
     """Entries of `bits` bits packed into longs without straddling them (1.16+).
 
-    Heightmaps, block states and biomes all use this layout.
+    Heightmaps, block states and biomes all use this layout, and a world read is
+    thousands of these, so it is done a whole section at a time.
     """
-    per_long = 64 // bits
-    mask = (1 << bits) - 1
-    values = np.zeros(count, dtype=np.int64)
-    i = 0
-    for word in packed.astype(np.uint64):
-        for slot in range(per_long):
-            if i >= count:
-                break
-            values[i] = (int(word) >> (slot * bits)) & mask
-            i += 1
-    return values
+    words = np.asarray(packed).astype(np.uint64)
+    shifts = np.arange(64 // bits, dtype=np.uint64) * np.uint64(bits)
+    values = (words[:, None] >> shifts[None, :]) & np.uint64((1 << bits) - 1)
+    return values.reshape(-1)[:count].astype(np.int64)
 
 
 def unpack_heightmap(packed: np.ndarray, bits: int = 9) -> np.ndarray:
