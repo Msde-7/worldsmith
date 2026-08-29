@@ -18,13 +18,16 @@ import numpy as np
 from . import play as play_mod
 from .climate import PARAM_NAMES, BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
+from .draw import render_iso, render_plan
 from .pack import export_zip, scaffold
+from .placement import set_sites, survey
 from .reference import reference_text
 from .registry import Registries
 from .render import contact_sheet, render_biomes, render_height, render_map, render_section
 from .scene import build_scene
 from .terrain import cell_interpolated, sample_terrain
 from .validate import ERROR, INFO, WARNING, Validator
+from .voxel import Grid
 from .world import World
 
 
@@ -334,6 +337,105 @@ def play_one(args, pack: Path, launch: bool) -> int:
     return 0
 
 
+def _build_world(args, registries):
+    """The dimension to survey against. A pack of builds and nothing else is a
+    normal use, so fall back to the vanilla overworld rather than refusing."""
+    ids = registries.ids("dimension")
+    custom = [i for i in ids if registries.origin("dimension", i) != registries.packs[0].name]
+    if args.dimension or custom:
+        dim_id, dimension = _resolve_dimension(registries, args.dimension)
+        settings = (dimension.get("generator") or {}).get("settings")
+        source = BiomeSource.from_json((dimension.get("generator") or {}).get("biome_source") or {},
+                                       registries)
+        return World.create(registries, settings, args.seed), source, dim_id
+    source = BiomeSource.from_json(
+        {"type": "minecraft:multi_noise", "preset": "minecraft:overworld"}, registries)
+    return World.create(registries, "minecraft:overworld", args.seed), source, "minecraft:overworld"
+
+
+def cmd_build(args):
+    """Draw a build, or list the ones a pack has."""
+    registries = Registries.load([args.pack], version=args.version)
+    templates = registries.packs[-1].templates
+    if not templates:
+        raise SystemExit(f"{args.pack} has no builds under data/<namespace>/structure/")
+    if not args.id:
+        print(f"{len(templates)} build(s) in {args.pack}")
+        for ident in sorted(templates):
+            grid = Grid.load(templates[ident])
+            print(f"  {ident:34s} {grid.sx}x{grid.sy}x{grid.sz}  "
+                  f"{grid.filled():7d} blocks  {len(grid.palette):3d} states")
+        return 0
+    if args.id not in templates:
+        raise SystemExit(f"no build {args.id} (have: {', '.join(sorted(templates))})")
+
+    grid = Grid.load(templates[args.id])
+    name = args.id.split(":")[-1].replace("/", "_")
+    out = Path(args.out) if args.out else Path("renders") / f"{name}.png"
+    render_iso(grid, out, scale=args.scale, turn=args.turn, label=args.id)
+    print(f"wrote {out}  ({grid.sx}x{grid.sy}x{grid.sz}, {grid.filled()} blocks)")
+    if args.plan:
+        levels = [int(v) for v in args.plan.split(",")]
+        bad = [v for v in levels if not 0 <= v < grid.sy]
+        if bad:
+            raise SystemExit(f"--plan level(s) {bad} are outside 0..{grid.sy - 1}")
+        plan = out.with_name(out.stem + "_plan.png")
+        render_plan(grid, plan, levels, scale=max(2, args.scale // 2), label=args.id)
+        print(f"wrote {plan}  (levels {', '.join(str(v) for v in levels)})")
+    return 0
+
+
+def cmd_sites(args):
+    """Where the game will put a pack's builds, and what the ground is like."""
+    registries = Registries.load([args.pack], version=args.version)
+    world, source, label = _build_world(args, registries)
+    sets = [args.set] if args.set else sorted(registries.packs[-1].data["structure_set"])
+    if not sets:
+        raise SystemExit(f"{args.pack} defines no structure sets")
+
+    half = args.area // 2
+    box = (args.center[0] - half, args.center[1] - half,
+           args.center[0] + half, args.center[1] + half)
+    print(f"{label}, seed {args.seed}, {args.area}x{args.area} blocks "
+          f"around ({args.center[0]}, {args.center[1]})")
+    for set_id in sets:
+        entry = registries.get("structure_set", set_id)
+        if entry is None:
+            raise SystemExit(f"unknown structure set {set_id}")
+        placement = entry.get("placement") or {}
+        members = [e["structure"] for e in entry.get("structures") or []]
+        structure = registries.get("structure", members[0]) if members else None
+        if structure is None:
+            raise SystemExit(f"{set_id} names no structure that this pack defines")
+        template = registries.templates.get(structure.get("start_pool", ""))
+        size = (1, 1)
+        if template is not None:
+            grid = Grid.load(template)
+            size = (grid.sx, grid.sz)
+        biomes = structure.get("biomes")
+        biomes = None if isinstance(biomes, str) else biomes
+        sink = int((structure.get("start_height") or {}).get("absolute", 0))
+
+        found = set_sites(registries, set_id, args.seed, *box)
+        reports = survey(world, source, found, seed=args.seed, biomes=biomes,
+                         sink=sink, size=size)
+        kept = [r for r in reports if r.accepted]
+        print(f"\n{set_id}  spacing {placement.get('spacing')}, "
+              f"separation {placement.get('separation')}, build {size[0]}x{size[1]}")
+        print(f"  {len(kept)} of {len(reports)} sites kept "
+              f"({', '.join(m.split(':')[-1] for m in members)})")
+        for report in sorted(reports, key=lambda r: abs(r.site.x) + abs(r.site.z))[:args.limit]:
+            verdict = "kept" if report.accepted else f"no: {report.biome.split(':')[-1]}"
+            print(f"    x {report.box[0]:7d} z {report.box[1]:7d}  "
+                  f"{report.biome.split(':')[-1]:16s} ground y {report.surface_y:3d}  "
+                  f"relief {report.relief:3d}  water {report.water * 100:3.0f}%  {verdict}")
+        if kept:
+            worst = max(kept, key=lambda r: r.relief)
+            print(f"  roughest ground under a kept build: {worst.relief} blocks "
+                  f"at x {worst.box[0]} z {worst.box[1]}")
+    return 0
+
+
 def cmd_reference(args):
     print(reference_text(args.topic))
     return 0
@@ -401,6 +503,23 @@ def build_parser() -> argparse.ArgumentParser:
     common(p)
     p.add_argument("--at", type=int, nargs=2, default=[0, 0], metavar=("X", "Z"))
     p.set_defaults(func=cmd_column)
+
+    p = sub.add_parser("build", help="draw a build in the pack, or list them")
+    common(p)
+    p.add_argument("--id", help="which build to draw (default: list them)")
+    p.add_argument("--out", default=None)
+    p.add_argument("--scale", type=int, default=6, help="pixels per block")
+    p.add_argument("--turn", type=int, default=0, help="quarter turns to view from")
+    p.add_argument("--plan", help="also draw plan slices at these heights, e.g. 10,17,24")
+    p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("sites", help="where the game will put this pack's builds")
+    common(p)
+    p.add_argument("--set", help="one structure set (default: all of the pack's)")
+    p.add_argument("--area", type=int, default=2048, help="side length in blocks to search")
+    p.add_argument("--center", type=int, nargs=2, default=[0, 0], metavar=("X", "Z"))
+    p.add_argument("--limit", type=int, default=12, help="sites to list per set")
+    p.set_defaults(func=cmd_sites)
 
     p = sub.add_parser("export", help="zip the pack for dropping into a world")
     p.add_argument("pack")
