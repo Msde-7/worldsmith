@@ -759,6 +759,44 @@ def test_platform_paths():
         play.WINDOWS, play.MACOS, platform.machine = real
 
 
+def test_template_round_trip():
+    """A structure template the game will not read is a silent failure: the
+    build simply is not there. So the writer is checked against its own reader,
+    and against the DataVersion the vendored jar declares."""
+    from worldsmith.voxel import Grid, data_version, parse_block, read_nbt
+
+    grid = Grid(3, 2, 3)
+    grid.fill(0, 0, 0, 2, 0, 2, "minecraft:stone_bricks")
+    grid.set(1, 1, 1, "minecraft:oak_stairs[facing=north,half=top]")
+    grid.set(0, 1, 0, "minecraft:chest[facing=west]",
+             {"id": "minecraft:chest", "LootTable": "minecraft:chests/simple_dungeon"})
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "t.nbt"
+        grid.save(path)
+        root = read_nbt(path)
+        back = Grid.load(path)
+
+    check("template keeps its size", list(root["size"]) == [3, 2, 3], str(root["size"]))
+    check("template writes every set block", len(root["blocks"]) == grid.filled(),
+          f"{len(root['blocks'])} vs {grid.filled()}")
+    check("template carries the vendored DataVersion",
+          root["DataVersion"] == data_version(), str(root["DataVersion"]))
+    check("reading a template back gives the same blocks",
+          back.counts() == grid.counts(), f"{back.counts()} vs {grid.counts()}")
+    check("block entities survive the round trip",
+          back.block_entities.get((0, 1, 0), {}).get("LootTable")
+          == "minecraft:chests/simple_dungeon", str(back.block_entities))
+
+    for spec in ("minecraft:chain", "minecraft:oak_stairs[facing=up]",
+                 "minecraft:oak_stairs[nonsense=1]"):
+        try:
+            parse_block(spec)
+            check(f"bad state {spec} is refused", False, "accepted")
+        except ValueError:
+            check(f"bad state {spec} is refused", True)
+
+
 def main():
     test_kernel_matches_numpy()
     test_sampling_modes_agree()
@@ -781,6 +819,7 @@ def main():
     test_grass_tint_and_block_colours()
     test_play_generates_structures()
     test_platform_paths()
+    test_template_round_trip()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

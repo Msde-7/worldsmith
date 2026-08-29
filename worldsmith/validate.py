@@ -11,9 +11,7 @@ Findings come back as ERROR (the game will reject or ignore this), WARNING
 from __future__ import annotations
 
 import difflib
-import json
 from dataclasses import dataclass
-from pathlib import Path
 
 from .climate import BiomeSource, unreachable_biomes
 from .colors import is_missing
@@ -21,6 +19,7 @@ from .density import DENSITY_FIELDS, DENSITY_TYPES, LEGACY_TYPES, REQUIRED_FIELD
 from .registry import Pack, Registries
 from .surface import (SURFACE_CONDITION_FIELDS, SURFACE_CONDITION_OPTIONAL,
                       SURFACE_CONDITION_TYPES, SURFACE_RULE_TYPES)
+from .voxel import block_states
 from .world import BUILTIN_NOISE, ROUTER_FIELDS, SETTINGS_REQUIRED
 
 ERROR, WARNING, INFO = "ERROR", "WARNING", "INFO"
@@ -52,10 +51,7 @@ class Validator:
         self.pack = pack
         self.version = version
         self.findings: list[Finding] = []
-        blocks_file = Path(__file__).resolve().parent.parent / "vanilla" / version / "blocks.json"
-        data = json.loads(blocks_file.read_text(encoding="utf-8")) if blocks_file.is_file() else {}
-        self.block_ids = set(data.get("blocks", []))
-        self.block_properties = data.get("properties", {})
+        self.block_ids, self.block_properties = block_states(version)
 
     def add(self, level, where, message, hint=None):
         self.findings.append(Finding(level, where, message, hint))
