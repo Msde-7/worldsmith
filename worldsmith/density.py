@@ -36,6 +36,9 @@ DENSITY_TYPES = {
     "weird_scaled_sampler", "y_clamped_gradient",
 }
 
+# 26.2 has no such registry entry and refuses a pack that names one.
+LEGACY_TYPES = {"weird_scaled_sampler"}
+
 # Fields each type accepts (validator). Values marked D are density functions.
 DENSITY_FIELDS: dict[str, dict[str, str]] = {
     "abs": {"argument": "D"},
@@ -86,16 +89,17 @@ REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "y_clamped_gradient": ("from_y", "to_y", "from_value", "to_value"),
     "range_choice": ("input", "min_inclusive", "max_exclusive", "when_in_range", "when_out_of_range"),
     "interval_select": ("input", "thresholds", "functions"),
-    "noise": ("noise",),
+    "noise": ("noise", "xz_scale", "y_scale"),
     "shifted_noise": ("noise", "shift_x", "shift_y", "shift_z", "xz_scale", "y_scale"),
     "shift": ("argument",), "shift_a": ("argument",), "shift_b": ("argument",),
     "weird_scaled_sampler": ("input", "noise", "rarity_value_mapper"),
-    "old_blended_noise": (),
+    "old_blended_noise": ("xz_scale", "y_scale", "xz_factor", "y_factor",
+                          "smear_scale_multiplier"),
     "spline": ("spline",),
     "flat_cache": ("argument",), "cache_2d": ("argument",), "cache_once": ("argument",),
     "cache_all_in_cell": ("argument",), "interpolated": ("argument",),
     "blend_density": ("argument",),
-    "find_top_surface": ("density", "cell_height"),
+    "find_top_surface": ("density", "upper_bound", "lower_bound", "cell_height"),
 }
 
 

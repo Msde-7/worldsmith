@@ -137,7 +137,8 @@ SPECIAL
                              fresh dimension these are 1 / 0 / passthrough / 0
 
 REMOVED: initial_density_without_jaggedness and terrain_shaper no longer exist.
-weird_scaled_sampler still parses but vanilla no longer uses it.
+weird_scaled_sampler is gone too: the game refuses a pack that names it.
+interval_select does the same job.
 """,
     "terrain": """HOW TERRAIN HEIGHT ACTUALLY WORKS
 =================================

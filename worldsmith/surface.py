@@ -19,9 +19,7 @@ NO_WATER = -(1 << 62)
 
 SURFACE_RULE_TYPES = {"block", "sequence", "condition"}
 
-# Fields each condition accepts. Everything here is mandatory except what
-# SURFACE_CONDITION_OPTIONAL lists: the game refuses the whole pack over a
-# missing key, and ignores an unknown one.
+# Fields each condition accepts, all mandatory but SURFACE_CONDITION_OPTIONAL.
 SURFACE_CONDITION_FIELDS: dict[str, tuple[str, ...]] = {
     "above_preliminary_surface": (),
     "biome": ("biome_is",),

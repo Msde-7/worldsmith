@@ -19,6 +19,13 @@ ROUTER_FIELDS = (
     "preliminary_surface_level", "final_density", "vein_toggle", "vein_ridged", "vein_gap",
 )
 
+# Every top-level noise_settings key. The game defaults none of them.
+SETTINGS_REQUIRED = (
+    "sea_level", "disable_mob_generation", "aquifers_enabled", "ore_veins_enabled",
+    "legacy_random_source", "default_block", "default_fluid", "spawn_target",
+    "noise", "noise_router", "surface_rule",
+)
+
 # Noise parameters the game hard-codes rather than reading from data.
 BUILTIN_NOISE = {
     "minecraft:surface": (-6, [1.0, 1.0, 1.0]),

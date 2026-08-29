@@ -17,11 +17,11 @@ from pathlib import Path
 
 from .climate import BiomeSource, unreachable_biomes
 from .colors import is_missing
-from .density import DENSITY_FIELDS, DENSITY_TYPES, REQUIRED_FIELDS
+from .density import DENSITY_FIELDS, DENSITY_TYPES, LEGACY_TYPES, REQUIRED_FIELDS
 from .registry import Pack, Registries
 from .surface import (SURFACE_CONDITION_FIELDS, SURFACE_CONDITION_OPTIONAL,
                       SURFACE_CONDITION_TYPES, SURFACE_RULE_TYPES)
-from .world import BUILTIN_NOISE, ROUTER_FIELDS
+from .world import BUILTIN_NOISE, ROUTER_FIELDS, SETTINGS_REQUIRED
 
 ERROR, WARNING, INFO = "ERROR", "WARNING", "INFO"
 
@@ -167,6 +167,9 @@ class Validator:
             self.add(ERROR, where, f"unknown density function type '{raw}'",
                      f"did you mean '{close}'?" if close else None)
             return
+        if t in LEGACY_TYPES:
+            self.add(ERROR, where, f"'{t}' is not a density function type in {self.version}",
+                     "the game refuses the whole pack; interval_select does the same job")
         allowed = DENSITY_FIELDS.get(t, {})
         for key in obj:
             if key != "type" and key not in allowed:
@@ -253,15 +256,24 @@ class Validator:
                 self.add(ERROR, f"{where}/points[{i}]", "point needs a 'value'")
             elif isinstance(point["value"], dict):
                 self.check_spline(f"{where}/points[{i}]/value", point["value"], depth + 1)
+            if "derivative" not in point:
+                self.add(ERROR, f"{where}/points[{i}]", "point needs a 'derivative'",
+                         "use 0.0 unless the spline should keep its slope through this point")
 
     def check_noise_settings(self, ident, obj):
         where = f"noise_settings/{ident}"
         if not isinstance(obj, dict):
             self.add(ERROR, where, "must be an object")
             return
+        for key in SETTINGS_REQUIRED:
+            if key not in obj:
+                self.add(ERROR, where, f"missing required field '{key}'",
+                         "the game refuses the whole pack rather than defaulting it")
         noise = obj.get("noise")
         if not isinstance(noise, dict):
-            self.add(ERROR, where, "missing 'noise' block with min_y/height/size_horizontal/size_vertical")
+            if "noise" in obj:
+                self.add(ERROR, where, "'noise' must be an object with "
+                                       "min_y/height/size_horizontal/size_vertical")
         else:
             min_y = noise.get("min_y")
             height = noise.get("height")
@@ -293,7 +305,8 @@ class Validator:
             self.check_block_state(f"{where}/{key}", obj.get(key))
         router = obj.get("noise_router")
         if not isinstance(router, dict):
-            self.add(ERROR, where, "missing 'noise_router'")
+            if "noise_router" in obj:
+                self.add(ERROR, where, "'noise_router' must be an object")
         else:
             for key in router:
                 if key not in ROUTER_FIELDS:
@@ -308,9 +321,7 @@ class Validator:
             for key, value in router.items():
                 if key in ROUTER_FIELDS:
                     self.check_density(f"{where}/noise_router/{key}", value, 0)
-        if obj.get("surface_rule") is None:
-            self.add(WARNING, where, "no surface_rule: the whole surface will be default_block")
-        else:
+        if "surface_rule" in obj:
             self.check_surface_rule(f"{where}/surface_rule", obj["surface_rule"])
 
     def check_surface_rule(self, where, rule, depth=0):
@@ -396,8 +407,10 @@ class Validator:
             lo, hi = cond.get("min_threshold"), cond.get("max_threshold")
             if isinstance(lo, (int, float)) and isinstance(hi, (int, float)) and lo > hi:
                 self.add(ERROR, where, "min_threshold > max_threshold, so this is never true")
-        if t == "vertical_gradient" and not cond.get("random_name", "x"):
-            self.add(ERROR, where, "'random_name' must be a non-empty string")
+        if t == "vertical_gradient" and "random_name" in cond:
+            name = cond["random_name"]
+            if not isinstance(name, str) or not name:
+                self.add(ERROR, where, "'random_name' must be a non-empty string")
 
     def check_dimension(self, ident, obj):
         where = f"dimension/{ident}"
