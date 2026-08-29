@@ -10,7 +10,9 @@
 **Describe a world out loud and let an AI build it.** worldsmith is Minecraft's
 world generation reimplemented in Python, bit for bit, so a model can draw the
 terrain in a couple of seconds instead of launching the game and flying around
-to find out what it made.
+to find out what it made. It does the same for what stands on the terrain:
+castles, towers, anything made of blocks, drawn and placed and checked before
+the game is ever started.
 
 That is the part that matters. Most tools write worldgen JSON and hope. Here the
 model writes the JSON, renders it, **looks at the picture**, and goes back and
@@ -135,6 +137,60 @@ shows up in the Data Packs list on the world-creation screen, so New World still
 gives you an ordinary world. Running the server writes `eula=true` inside
 `.runtime/`, which accepts Mojang's EULA.
 
+## The other half: things to put in it
+
+Terrain is half of a world. The other half is what stands on it, and that is the
+same loop again: write it, draw it, look at the picture, change it.
+
+A build is a box of blocks. `structures.add` turns that box into the four files
+the game needs, and from then on Minecraft places it exactly the way it places a
+village.
+
+```python
+grid = Grid(32, 24, 32)
+grid.fill(4, 8, 4, 27, 20, 27, "minecraft:stone_bricks")
+grid.fill(5, 9, 5, 26, 19, 26, "minecraft:air")          # air is what hollows it
+structures.add(writer, "keep:tower", grid, ["minecraft:plains"], sink=-9)
+```
+
+![great castle](renders/castle_iso.png)
+![ruined castle](renders/castle_ruin_iso.png)
+
+```bash
+worldsmith build  packs/keep --id keep:tower --plan 8,14   # draw it
+worldsmith sites  packs/keep            # where it lands, and on what ground
+worldsmith render packs/keep --builds   # those sites, on the terrain
+worldsmith play   packs/keep --spawn-at keep:tower
+```
+
+`sites` is the useful one. Where the game will put a build is not a mystery to
+be discovered by generating a world and flying around: it is a spread of one
+chunk per region, a rotation, and a biome check, all of which are reproducible.
+worldsmith reproduces them and then asks the terrain half what the ground is
+like at each one, so a build about to sit in a lake or on twenty blocks of
+relief says so before a server ever starts.
+
+```
+castle:great_castles  spacing 24, separation 10
+  5 of 6 sites kept
+    ruined_castle    x      48 z    -224  oakwood   ground y  85  relief   8  kept
+    great_castle     x    -271 z     129  shore     ground y  72  relief  11  no: shore
+```
+
+That model is checked against Minecraft rather than trusted:
+`tools/verify_placement.py` drops a build into an ordinary vanilla world and
+compares site for site. 337 of 337 for a one block build, 151 of 151 for a
+sixty-four block one, and every site of a pack with two sets and an exclusion
+zone between them.
+
+![a castle as the game built it](renders/final_great_castle.png)
+
+**castle_country** is the pack that uses both halves: downs and oak woods over
+flat topped crags, with castles, ruins and tower keeps standing in it. Its crag
+noise feeds the router's weirdness, so the biome boxes follow the crags, and
+since biomes are the only placement rule the game gives you, that is how a pack
+says "build on the high ground".
+
 ## The packs in here
 
 **red_canyons**, a tableland cut by slot gorges. The canyon network is
@@ -181,6 +237,13 @@ worldsmith export  packs/mine        # a zip for someone else's game
 worldsmith reference terrain         # the height formula and what every knob does
 worldsmith probe   packs/mine --at 100 64 -200 --density mine:offset mine:factor
 worldsmith column  packs/mine --at 100 -200      # one column, top to bottom
+
+worldsmith build   packs/mine                    # the builds in a pack
+worldsmith build   packs/mine --id mine:tower --plan 8,14
+worldsmith sites   packs/mine                    # where they land, and on what
+worldsmith render  packs/mine --builds           # that, drawn on the terrain
+worldsmith inspect <world> --pack packs/mine --structure mine:tower
+worldsmith reference builds
 ```
 
 Run them as `python -m worldsmith.cli <command>` from the repository. `check` is
@@ -189,7 +252,10 @@ silently at world creation and hands you a void world. The validator covers ever
 node type and field, every surface rule condition and the keys it must carry,
 the mandatory noise_settings and router fields, dangling references, spline
 ordering and derivatives, block ids and properties, biome tags, and biome boxes
-that can never win.
+that can never win. For builds it covers pools that name a template which is not
+there, the element type that throws air away, a separation above its spacing, an
+exclusion zone pointing at nothing, and biomes the pack's own dimension never
+places.
 
 <details>
 <summary><b>Caves, aquifers, and why they go together</b></summary>
