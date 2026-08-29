@@ -229,6 +229,40 @@ def pick_viewpoint(world: World, span: int = 1536, step: int = 8) -> Viewpoint:
     return Viewpoint(sx, sz, stand_y, landmark, note)
 
 
+def viewpoint_at_build(world, source, registries, structure_id: str, seed: int,
+                       reach: int = 4096) -> Viewpoint | None:
+    """Spawn beside a build rather than at the most dramatic terrain.
+
+    The placement model knows where builds land before the world is generated,
+    so this needs no second pass over the finished world.
+    """
+    from .placement import set_reports
+
+    structure = registries.get("structure", structure_id)
+    if structure is None:
+        raise SystemExit(f"unknown structure {structure_id}")
+    owner = next((ident for ident in registries.ids("structure_set")
+                  if any(e.get("structure") == structure_id
+                         for e in (registries.get("structure_set", ident) or {}).get("structures") or [])),
+                 None)
+    if owner is None:
+        raise SystemExit(f"no structure set places {structure_id}")
+    reports = [r for r in set_reports(registries, world, source, owner, seed,
+                                      -reach, -reach, reach, reach)
+               if r.build == structure_id]
+    kept = [r for r in reports if r.accepted]
+    if not kept:
+        return None
+    best = min(kept, key=lambda r: abs(r.box[0]) + abs(r.box[1]))
+    x = (best.box[0] + best.box[2]) // 2
+    z = best.box[3] + 4                      # just outside one edge, looking in
+    ground = sample_terrain(world, x, z, 1, 1, step=1)
+    y = int(ground.surface_y[0, 0]) + 1
+    middle = ((best.box[0] + best.box[2]) // 2, (best.box[1] + best.box[3]) // 2)
+    return Viewpoint(x, z, y, (middle[0], middle[1], best.surface_y + 8),
+                     f"beside {structure_id.split(':')[-1]}")
+
+
 def as_overworld(pack: Path, dimension_id: str, registries: Registries, work: Path) -> Path:
     """Copy the pack with its dimension also written as minecraft:overworld, so a
     new world simply is this terrain."""

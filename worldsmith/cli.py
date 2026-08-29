@@ -16,11 +16,13 @@ from pathlib import Path
 import numpy as np
 
 from . import play as play_mod
+from .anvil import read_box, region_dir, structure_starts
 from .climate import PARAM_NAMES, BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
 from .draw import mark_builds, render_iso, render_plan
 from .pack import export_zip, scaffold
-from .placement import set_sites, survey
+from .placement import set_reports
+from .structures import rotate_xz
 from .reference import reference_text
 from .registry import Registries
 from .render import contact_sheet, render_biomes, render_height, render_map, render_section
@@ -147,28 +149,14 @@ def cmd_check(args):
 
 
 def _site_reports(args, world, source, x0, z0, span):
-    """Every build site in a rendered area, for the overlay and for `sites`."""
-    registries = Registries.load([args.pack], version=args.version) if args.pack else None
-    if registries is None:
+    """Every build site in a rendered area, for the overlay."""
+    if not getattr(args, "pack", None):
         return []
+    registries = Registries.load([args.pack], version=args.version)
     reports = []
     for set_id in sorted(registries.packs[-1].data["structure_set"]):
-        entry = registries.get("structure_set", set_id) or {}
-        members = [e["structure"] for e in entry.get("structures") or []]
-        structure = registries.get("structure", members[0]) if members else None
-        if structure is None:
-            continue
-        template = registries.templates.get(structure.get("start_pool", ""))
-        size = (1, 1)
-        if template is not None:
-            grid = Grid.load(template)
-            size = (grid.sx, grid.sz)
-        biomes = structure.get("biomes")
-        found = set_sites(registries, set_id, args.seed, x0, z0, x0 + span - 1, z0 + span - 1)
-        reports += survey(world, source, found, seed=args.seed,
-                          biomes=None if isinstance(biomes, str) else biomes,
-                          sink=int((structure.get("start_height") or {}).get("absolute", 0)),
-                          size=size)
+        reports += set_reports(registries, world, source, set_id, args.seed,
+                               x0, z0, x0 + span - 1, z0 + span - 1)
     return reports
 
 
@@ -329,7 +317,14 @@ def play_one(args, pack: Path, launch: bool) -> int:
 
     print(f"{name}   (from {dim_id}, seed {args.seed})")
     print("  1/5  looking for somewhere worth spawning")
-    spawn = play_mod.pick_viewpoint(world)
+    spawn = None
+    if args.spawn_at:
+        source = BiomeSource.from_json((dimension.get("generator") or {}).get("biome_source") or {},
+                                       registries)
+        spawn = play_mod.viewpoint_at_build(world, source, registries, args.spawn_at, args.seed)
+        if spawn is None:
+            print(f"       no {args.spawn_at} within reach; falling back to the terrain")
+    spawn = spawn or play_mod.pick_viewpoint(world)
     print(f"       spawn at ({spawn.x}, {spawn.y}, {spawn.z}) - {spawn.note}")
 
     print("  2/5  fetching the Minecraft server and a Java runtime (cached after the first run)")
@@ -436,36 +431,95 @@ def cmd_sites(args):
         if entry is None:
             raise SystemExit(f"unknown structure set {set_id}")
         placement = entry.get("placement") or {}
-        members = [e["structure"] for e in entry.get("structures") or []]
-        structure = registries.get("structure", members[0]) if members else None
-        if structure is None:
-            raise SystemExit(f"{set_id} names no structure that this pack defines")
-        template = registries.templates.get(structure.get("start_pool", ""))
-        size = (1, 1)
-        if template is not None:
-            grid = Grid.load(template)
-            size = (grid.sx, grid.sz)
-        biomes = structure.get("biomes")
-        biomes = None if isinstance(biomes, str) else biomes
-        sink = int((structure.get("start_height") or {}).get("absolute", 0))
-
-        found = set_sites(registries, set_id, args.seed, *box)
-        reports = survey(world, source, found, seed=args.seed, biomes=biomes,
-                         sink=sink, size=size)
+        reports = set_reports(registries, world, source, set_id, args.seed, *box)
         kept = [r for r in reports if r.accepted]
-        print(f"\n{set_id}  spacing {placement.get('spacing')}, "
-              f"separation {placement.get('separation')}, build {size[0]}x{size[1]}")
-        print(f"  {len(kept)} of {len(reports)} sites kept "
-              f"({', '.join(m.split(':')[-1] for m in members)})")
+        print()
+        print(f"{set_id}  spacing {placement.get('spacing')}, "
+              f"separation {placement.get('separation')}")
+        print(f"  {len(kept)} of {len(reports)} sites kept")
         for report in sorted(reports, key=lambda r: abs(r.site.x) + abs(r.site.z))[:args.limit]:
             verdict = "kept" if report.accepted else f"no: {report.biome.split(':')[-1]}"
-            print(f"    x {report.box[0]:7d} z {report.box[1]:7d}  "
-                  f"{report.biome.split(':')[-1]:16s} ground y {report.surface_y:3d}  "
+            print(f"    {report.build.split(':')[-1]:16s} x {report.box[0]:7d} z {report.box[1]:7d}  "
+                  f"{report.biome.split(':')[-1]:14s} ground y {report.surface_y:3d}  "
                   f"relief {report.relief:3d}  water {report.water * 100:3.0f}%  {verdict}")
         if kept:
             worst = max(kept, key=lambda r: r.relief)
             print(f"  roughest ground under a kept build: {worst.relief} blocks "
-                  f"at x {worst.box[0]} z {worst.box[1]}")
+                  f"under {worst.build.split(':')[-1]} at x {worst.box[0]} z {worst.box[1]}")
+    return 0
+
+
+def cmd_inspect(args):
+    """What a generated world actually contains, which is the only record of
+    what the game did rather than what the pack asked for."""
+    world = Path(args.world)
+    if not region_dir(world).is_dir():
+        raise SystemExit(f"no region files under {world}")
+    starts = structure_starts(world)
+    if not starts:
+        print("no structures in this world")
+        return 1
+
+    for ident, entries in sorted(starts.items()):
+        unique = {tuple(e["centre"]): e for e in entries}
+        print(f"{ident}: {len(unique)} placed")
+        for centre, entry in sorted(unique.items())[:args.limit]:
+            box = entry["box"]
+            print(f"    x {centre[0]:7d} z {centre[1]:7d}   y {box[1]}..{box[4]}   "
+                  f"{box[3] - box[0] + 1}x{box[5] - box[2] + 1}   {entry['rotation'].lower()}")
+        if len(unique) > args.limit:
+            print(f"    ... {len(unique) - args.limit} more")
+
+    if not args.structure:
+        return 0
+    entries = starts.get(args.structure)
+    if not entries:
+        raise SystemExit(f"{args.structure} is not in this world")
+    unique = sorted({tuple(e["centre"]): e for e in entries}.values(),
+                    key=lambda e: abs(e["centre"][0]) + abs(e["centre"][1]))
+    pick = unique[min(args.index, len(unique) - 1)]
+    box = pick["box"]
+    print(f"\n{args.structure} at {tuple(pick['centre'])}, turned {pick['rotation'].lower()}")
+
+    if args.render:
+        pad = args.pad
+        grid = read_box(world, box[0] - pad, box[2] - pad, box[3] + pad, box[5] + pad,
+                        box[1] - 4, box[4] + 2)
+        out = render_iso(grid, args.render, scale=args.scale, turn=args.turn,
+                         label=f"{args.structure} at x {pick['centre'][0]} "
+                               f"z {pick['centre'][1]}, as generated")
+        print(f"  wrote {out}  ({grid.filled()} blocks read)")
+
+    if not args.pack:
+        return 0
+    registries = Registries.load([args.pack], version=args.version)
+    template_id = (registries.get("structure", args.structure) or {}).get("start_pool")
+    path = registries.templates.get(template_id or args.structure)
+    if path is None:
+        print(f"  {args.pack} has no template for {args.structure}, nothing to compare")
+        return 0
+
+    template = Grid.load(path)
+    placed = read_box(world, box[0], box[2], box[3], box[5], box[1], box[4])
+    same, missing = 0, {}
+    for x in range(template.sx):
+        for y in range(template.sy):
+            for z in range(template.sz):
+                wanted = template.get(x, y, z)
+                if wanted is None:
+                    continue
+                wx, wz = rotate_xz(x, z, template.sx, template.sz, pick["rotation"])
+                found = placed.get(wx, y, wz) or "minecraft:air"
+                if found.split("[")[0] == wanted.split("[")[0]:
+                    same += 1
+                else:
+                    key = (wanted.split("[")[0], found.split("[")[0])
+                    missing[key] = missing.get(key, 0) + 1
+    total = same + sum(missing.values())
+    print(f"  {same}/{total} blocks are what the template asked for "
+          f"({100.0 * same / max(1, total):.2f}%)")
+    for (wanted, found), n in sorted(missing.items(), key=lambda kv: -kv[1])[:10]:
+        print(f"    {n:6d}  wanted {wanted.split(':')[-1]:22s} found {found.split(':')[-1]}")
     return 0
 
 
@@ -570,8 +624,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--radius", type=int, default=384, help="blocks to pre-build around spawn")
     p.add_argument("--pregen", type=int, default=90, help="seconds to spend pre-building (0 to skip)")
     p.add_argument("--work", default=None)
+    p.add_argument("--spawn-at", help="spawn beside this build instead of at the terrain")
     p.add_argument("--no-launch", dest="launch", action="store_false", default=True)
     p.set_defaults(func=cmd_play)
+
+    p = sub.add_parser("inspect", help="what a generated world actually contains")
+    p.add_argument("world", help="path to a world directory")
+    p.add_argument("--pack", help="compare a placed build against this pack's template")
+    p.add_argument("--version", default="26.2")
+    p.add_argument("--structure", help="which build to look at closely")
+    p.add_argument("--index", type=int, default=0, help="which one of them, nearest first")
+    p.add_argument("--render", help="draw it as it stands, to this file")
+    p.add_argument("--pad", type=int, default=12, help="blocks of terrain around it")
+    p.add_argument("--scale", type=int, default=4)
+    p.add_argument("--turn", type=int, default=0)
+    p.add_argument("--limit", type=int, default=8, help="positions to list per structure")
+    p.set_defaults(func=cmd_inspect)
 
     p = sub.add_parser("reference", help="print the worldgen syntax reference")
     p.add_argument("topic", nargs="?", default="index")

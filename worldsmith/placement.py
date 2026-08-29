@@ -19,6 +19,7 @@ import numpy as np
 from .climate import assign_biomes, climate_target
 from .jrandom import JavaRandom, to_signed64
 from .terrain import base_height, sample_terrain
+from .voxel import Grid
 
 ROTATIONS = ("NONE", "CLOCKWISE_90", "CLOCKWISE_180", "COUNTERCLOCKWISE_90")
 
@@ -55,6 +56,31 @@ def site_rotation(seed: int, chunk_x: int, chunk_z: int) -> str:
     return ROTATIONS[random.next_int(4)]
 
 
+def chosen_build(seed: int, site: Site, entries: list[dict]) -> str | None:
+    """Which build of a set the game tries at this site.
+
+    A set holds several builds with weights and picks one per site. If that one
+    is refused, the game drops it and draws again from what is left, so this is
+    the first choice rather than the last word; where the builds of a set share
+    a biome list, which is the usual case, the first choice is what gets built.
+    """
+    weights = [(e.get("structure"), int(e.get("weight", 1))) for e in entries]
+    total = sum(w for _, w in weights)
+    if total <= 0:
+        return None
+    random = JavaRandom(0)
+    random.set_seed(seed)
+    a, b = random.next_long(), random.next_long()
+    random.set_seed(to_signed64(to_signed64(site.chunk_x * a)
+                                ^ to_signed64(site.chunk_z * b) ^ seed))
+    pick = random.next_int(total)
+    for ident, weight in weights:
+        pick -= weight
+        if pick < 0:
+            return ident
+    return weights[-1][0]
+
+
 def footprint(site: Site, size_x: int, size_z: int, rotation: str) -> tuple[int, int, int, int]:
     """The block box a build of this size covers, once turned and anchored.
 
@@ -80,6 +106,7 @@ def anchor_of(site: Site, seed: int, size_x: int = 1, size_z: int = 1) -> tuple[
 @dataclass
 class SiteReport:
     site: Site
+    build: str
     rotation: str
     box: tuple[int, int, int, int]     # x0, z0, x1, z1 the build covers
     biome: str
@@ -144,7 +171,7 @@ def set_sites(registries, set_id: str, seed: int, x0: int, z0: int, x1: int, z1:
 
 
 def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: int = 0,
-           size: tuple[int, int] = (1, 1), step: int = 8) -> list[SiteReport]:
+           size: tuple[int, int] = (1, 1), step: int = 8, build: str = "") -> list[SiteReport]:
     """What the ground is like where each site landed, and whether the game will
     accept it.
 
@@ -178,6 +205,7 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
         biome = source.biomes[int(picks[i])] if source.biomes else ""
         reports.append(SiteReport(
             site=site,
+            build=build,
             rotation=rotation,
             box=box,
             biome=biome,
@@ -188,3 +216,36 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
             accepted=allowed is None or biome in allowed,
         ))
     return reports
+
+
+def set_reports(registries, world, source, set_id: str, seed: int,
+                x0: int, z0: int, x1: int, z1: int, step: int = 8) -> list[SiteReport]:
+    """Every site of one structure set, surveyed as the build that will stand there.
+
+    A set can hold builds of different sizes and different biome lists, and the
+    game picks one per site, so each site is measured against its own build.
+    """
+    entry = registries.get("structure_set", set_id)
+    if entry is None:
+        raise ValueError(f"unknown structure set {set_id}")
+    entries = entry.get("structures") or []
+    by_build: dict[str, list[Site]] = {}
+    for site in set_sites(registries, set_id, seed, x0, z0, x1, z1):
+        ident = chosen_build(seed, site, entries)
+        if ident:
+            by_build.setdefault(ident, []).append(site)
+
+    reports = []
+    for ident, group in by_build.items():
+        structure = registries.get("structure", ident) or {}
+        template = registries.templates.get(structure.get("start_pool", ident))
+        size = (1, 1)
+        if template is not None:
+            grid = Grid.load(template)
+            size = (grid.sx, grid.sz)
+        biomes = structure.get("biomes")
+        reports += survey(world, source, group, seed=seed,
+                          biomes=None if isinstance(biomes, str) else biomes,
+                          sink=int((structure.get("start_height") or {}).get("absolute", 0)),
+                          size=size, step=step, build=ident)
+    return sorted(reports, key=lambda r: (r.site.chunk_x, r.site.chunk_z))

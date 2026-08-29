@@ -996,7 +996,61 @@ def test_structure_validation():
           str(findings(unplaced_biome)))
 
 
+def test_set_reports():
+    """A set can hold several builds, and the game picks one per site. The
+    choice is checked against a server by tools/verify_placement.py; this pins
+    that it is stable, that weights are honoured, and that each site is measured
+    against the build that will actually stand on it."""
+    from worldsmith.climate import BiomeSource
+    from worldsmith.pack import PackWriter
+    from worldsmith.placement import Site, chosen_build, set_reports
+    from worldsmith.registry import Registries
+    from worldsmith.structures import add, spread
+    from worldsmith.voxel import Grid
+    from worldsmith.world import World
+
+    small, large = Grid(4, 2, 4), Grid(48, 2, 48)
+    small.fill(0, 0, 0, 3, 0, 3, "minecraft:stone_bricks")
+    large.fill(0, 0, 0, 47, 0, 47, "minecraft:stone_bricks")
+
+    entries = [{"structure": "test:small", "weight": 1}, {"structure": "test:large", "weight": 3}]
+    picks = [chosen_build(11, Site(x, z), entries) for x in range(20) for z in range(20)]
+    check("the choice is stable for a site",
+          chosen_build(11, Site(3, 4), entries) == chosen_build(11, Site(3, 4), entries))
+    check("every pick is one of the set's builds",
+          set(picks) <= {"test:small", "test:large"}, str(set(picks)))
+    share = picks.count("test:large") / len(picks)
+    check("weight 3 of 4 wins about three quarters of the sites",
+          0.65 < share < 0.85, f"{share:.2f}")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = PackWriter(Path(tmp) / "p", "test")
+        writer.mcmeta()
+        add(writer, "test:small", small, ["minecraft:plains"], sink=-1)
+        add(writer, "test:large", large, ["minecraft:plains"], sink=-1)
+        writer.add("structure_set", "test:both",
+                   spread({"test:small": 1, "test:large": 3}, spacing=8, separation=3, salt=5))
+        registries = Registries.load([writer.root])
+        world = World.create(registries, "minecraft:overworld", 7)
+        source = BiomeSource.from_json(
+            {"type": "minecraft:multi_noise", "preset": "minecraft:overworld"}, registries)
+        reports = set_reports(registries, world, source, "test:both", 7, -256, -256, 255, 255)
+
+    # 512 blocks is 32 chunks, which is 4 by 4 regions of 8
+    check("every site is reported", len(reports) == 16, str(len(reports)))
+    check("each site names the build that will stand on it",
+          all(r.build in ("test:small", "test:large") for r in reports))
+    for report in reports:
+        side = report.box[2] - report.box[0] + 1
+        want = 48 if report.build == "test:large" else 4
+        check(f"the footprint is the build's own size ({report.build.split(':')[-1]})",
+              side == want, f"{side} for {report.build}")
+    check("the ground is measured, not guessed",
+          all(r.high >= r.low and r.surface_y > 0 for r in reports))
+
+
 def main():
+
     test_kernel_matches_numpy()
     test_sampling_modes_agree()
     test_determinism()
@@ -1022,6 +1076,7 @@ def main():
     test_structure_files()
     test_placement_geometry()
     test_structure_validation()
+    test_set_reports()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

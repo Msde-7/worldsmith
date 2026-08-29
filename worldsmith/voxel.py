@@ -124,7 +124,10 @@ def _payload(value) -> bytes:
 def write_nbt(root: dict, path: Path) -> Path:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(gzip.compress(bytes([TAG_COMPOUND]) + _string("") + _payload(root)))
+    raw = bytes([TAG_COMPOUND]) + _string("") + _payload(root)
+    # mtime 0: the same build writes the same bytes, so rebuilding a pack does
+    # not churn every template in the diff
+    path.write_bytes(gzip.compress(raw, mtime=0))
     return path
 
 
