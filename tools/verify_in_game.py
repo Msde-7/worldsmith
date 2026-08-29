@@ -37,6 +37,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import worldsmith.voxel as _voxel
+from worldsmith.anvil import (read_region, region_dir, section_blocks,
+                             unpack_heightmap, unpack_longs)
 from worldsmith.climate import BiomeSource
 from worldsmith.play import RUNTIME, as_overworld, ensure_runtime
 from worldsmith.registry import Pack, Registries
@@ -48,146 +51,9 @@ from worldsmith.world import World
 # heightmap pass, which reads one array
 BLOCK_CHUNKS = 24
 
-TAG_END, TAG_BYTE, TAG_SHORT, TAG_INT, TAG_LONG = 0, 1, 2, 3, 4
-TAG_FLOAT, TAG_DOUBLE, TAG_BYTE_ARRAY, TAG_STRING = 5, 6, 7, 8
-TAG_LIST, TAG_COMPOUND, TAG_INT_ARRAY, TAG_LONG_ARRAY = 9, 10, 11, 12
-
-
-class NbtReader:
-    """Just enough NBT to read a chunk."""
-
-    def __init__(self, data: bytes):
-        self.data = data
-        self.pos = 0
-
-    def _take(self, n: int) -> bytes:
-        out = self.data[self.pos:self.pos + n]
-        self.pos += n
-        return out
-
-    def u1(self): return struct.unpack(">B", self._take(1))[0]
-    def i1(self): return struct.unpack(">b", self._take(1))[0]
-    def i2(self): return struct.unpack(">h", self._take(2))[0]
-    def i4(self): return struct.unpack(">i", self._take(4))[0]
-    def i8(self): return struct.unpack(">q", self._take(8))[0]
-    def f4(self): return struct.unpack(">f", self._take(4))[0]
-    def f8(self): return struct.unpack(">d", self._take(8))[0]
-
-    def string(self) -> str:
-        length = struct.unpack(">H", self._take(2))[0]
-        return self._take(length).decode("utf-8", "replace")
-
-    def payload(self, tag: int):
-        if tag == TAG_BYTE: return self.i1()
-        if tag == TAG_SHORT: return self.i2()
-        if tag == TAG_INT: return self.i4()
-        if tag == TAG_LONG: return self.i8()
-        if tag == TAG_FLOAT: return self.f4()
-        if tag == TAG_DOUBLE: return self.f8()
-        if tag == TAG_BYTE_ARRAY:
-            n = self.i4()
-            return np.frombuffer(self._take(n), dtype=np.int8)
-        if tag == TAG_STRING: return self.string()
-        if tag == TAG_LIST:
-            item = self.u1()
-            n = self.i4()
-            return [self.payload(item) for _ in range(max(0, n))]
-        if tag == TAG_COMPOUND:
-            out = {}
-            while True:
-                child = self.u1()
-                if child == TAG_END:
-                    return out
-                # read the name BEFORE the payload: in `d[f()] = g()` Python
-                # evaluates g() first, which would swap the two reads.
-                name = self.string()
-                out[name] = self.payload(child)
-        if tag == TAG_INT_ARRAY:
-            n = self.i4()
-            return np.frombuffer(self._take(n * 4), dtype=">i4").astype(np.int32)
-        if tag == TAG_LONG_ARRAY:
-            n = self.i4()
-            return np.frombuffer(self._take(n * 8), dtype=">i8").astype(np.int64)
-        raise ValueError(f"unknown NBT tag {tag} at {self.pos}")
-
-    def root(self):
-        tag = self.u1()
-        if tag != TAG_COMPOUND:
-            raise ValueError(f"expected a compound root, got {tag}")
-        self.string()
-        return self.payload(TAG_COMPOUND)
-
-
-def read_region(path: Path) -> dict[tuple[int, int], dict]:
-    """Return {(chunk_x, chunk_z): chunk NBT} for one .mca file."""
-    raw = path.read_bytes()
-    if len(raw) < 8192:
-        return {}
-    chunks: dict[tuple[int, int], dict] = {}
-    for index in range(1024):
-        offset = struct.unpack(">I", b"\0" + raw[index * 4:index * 4 + 3])[0]
-        sectors = raw[index * 4 + 3]
-        if offset == 0 or sectors == 0:
-            continue
-        start = offset * 4096
-        length = struct.unpack(">I", raw[start:start + 4])[0]
-        scheme = raw[start + 4]
-        payload = raw[start + 5:start + 4 + length]
-        if scheme == 1:
-            payload = gzip.decompress(payload)
-        elif scheme == 2:
-            payload = zlib.decompress(payload)
-        elif scheme != 3:
-            continue
-        nbt = NbtReader(payload).root()
-        chunks[(nbt.get("xPos", 0), nbt.get("zPos", 0))] = nbt
-    return chunks
-
-
-def unpack_longs(packed: np.ndarray, bits: int, count: int) -> np.ndarray:
-    """Entries of `bits` bits packed into longs without straddling them (1.16+).
-
-    Both heightmaps and section block states use this layout.
-    """
-    per_long = 64 // bits
-    mask = (1 << bits) - 1
-    values = np.zeros(count, dtype=np.int64)
-    i = 0
-    for word in packed.astype(np.uint64):
-        for slot in range(per_long):
-            if i >= count:
-                break
-            values[i] = (int(word) >> (slot * bits)) & mask
-            i += 1
-    return values
-
-
-def unpack_heightmap(packed: np.ndarray, bits: int = 9) -> np.ndarray:
-    return unpack_longs(packed, bits, 256).reshape(16, 16)          # [z][x]
-
-
-def section_blocks(nbt, lo: int, hi: int) -> dict[int, np.ndarray]:
-    """{block y: (16, 16) of block names} over y in [lo, hi], indexed [z][x]."""
-    out: dict[int, np.ndarray] = {}
-    for section in nbt.get("sections") or []:
-        base = int(section.get("Y", 0)) * 16
-        if base > hi or base + 15 < lo:
-            continue
-        states = (section.get("block_states") or {})
-        palette = [str(entry.get("Name")) for entry in (states.get("palette") or [])]
-        if not palette:
-            continue
-        data = states.get("data")
-        if data is None or len(data) == 0:
-            index = np.zeros(4096, dtype=np.int64)
-        else:
-            bits = max(4, math.ceil(math.log2(len(palette))))
-            index = unpack_longs(np.asarray(data), bits, 4096)
-        names = np.array(palette, dtype=object)[index].reshape(16, 16, 16)   # [y][z][x]
-        for dy in range(16):
-            if lo <= base + dy <= hi:
-                out[base + dy] = names[dy]
-    return out
+# the NBT and region readers live in the library now, so the tools and the
+# engine share one implementation
+NbtReader = _voxel.NbtReader
 
 
 def is_decorated(registries: Registries, pack: Pack) -> bool:
@@ -197,16 +63,6 @@ def is_decorated(registries: Registries, pack: Pack) -> bool:
         if any(step for step in (biome.get("features") or [])):
             return True
     return False
-
-
-def region_path(world_dir: Path) -> Path:
-    """26.x keeps the overworld in world/dimensions/minecraft/overworld/region;
-    older versions used world/region."""
-    modern = world_dir / "dimensions" / "minecraft" / "overworld" / "region"
-    if modern.is_dir():
-        return modern
-    legacy = world_dir / "region"
-    return legacy if legacy.is_dir() else modern
 
 
 def run_server(java: Path, jar: Path, work: Path, pack: Path, seed: int,
@@ -265,14 +121,15 @@ def run_server(java: Path, jar: Path, work: Path, pack: Path, seed: int,
         for cx in range(-16, 16, 16):
             send(f"forceload add {cx * 16} {cz * 16} {(cx + 15) * 16 + 15} {(cz + 15) * 16 + 15}")
 
-    region_dir = region_path(work / "world")
+    region_root = region_dir(work / "world")
     deadline = time.time() + generate_timeout
     stable, last = 0, -1
     while time.time() < deadline:
         time.sleep(6)
         send("save-all flush")
         time.sleep(4)
-        size = sum(f.stat().st_size for f in region_dir.glob("*.mca")) if region_dir.is_dir() else 0
+        size = (sum(f.stat().st_size for f in region_root.glob("*.mca"))
+                if region_root.is_dir() else 0)
         print(f"  region data: {size / 1024:.0f} KB")
         if size == last and size > 0:
             stable += 1
@@ -305,10 +162,10 @@ def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
         source = None
     decorated = is_decorated(registries, Pack(pack))
 
-    region_dir = region_path(world_dir)
-    files = sorted(region_dir.glob("*.mca"))
+    region_root = region_dir(world_dir)
+    files = sorted(region_root.glob("*.mca"))
     if not files:
-        raise SystemExit(f"no region files under {region_dir}")
+        raise SystemExit(f"no region files under {region_root}")
 
     compared = skipped = total = exact = 0
     block_chunks = block_seen = block_match = 0
