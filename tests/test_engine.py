@@ -1047,6 +1047,19 @@ def test_set_reports():
               side == want, f"{side} for {report.build}")
     check("the ground is measured, not guessed",
           all(r.high >= r.low and r.surface_y > 0 for r in reports))
+    # the build's own y=0 lands at the surface plus its start_height, which was
+    # -1 for both of these
+    check("the floor lands where start_height puts it",
+          all(r.floor_y == r.surface_y - 1 for r in reports),
+          str([(r.floor_y, r.surface_y) for r in reports[:3]]))
+
+    stand = Grid(5, 6, 5)
+    stand.fill(0, 0, 0, 4, 2, 4, "minecraft:stone")
+    stand.fill(1, 3, 1, 3, 5, 3, "minecraft:air")
+    check("a standing spot is solid with head room above it",
+          stand.standing_spot() == (2, 2, 2), str(stand.standing_spot()))
+    check("a solid block with nothing placed above it is not a standing spot",
+          Grid(3, 3, 3).standing_spot() is None)
 
 
 def main():

@@ -263,6 +263,27 @@ class Grid:
     def filled(self) -> int:
         return int(np.count_nonzero(self.cells))
 
+    def standing_spot(self) -> tuple[int, int, int] | None:
+        """A block in here a player could stand on, searched from the middle out.
+
+        Solid, with two blocks of air above it that the build places itself, so
+        the answer does not depend on what the terrain around it turns out to be.
+        """
+        air = {index for index, spec in enumerate(self.palette, start=1)
+               if spec.split("[")[0].endswith("air")}
+        middle = (self.sx // 2, self.sz // 2)
+        columns = sorted(((x, z) for x in range(self.sx) for z in range(self.sz)),
+                         key=lambda c: abs(c[0] - middle[0]) + abs(c[1] - middle[1]))
+        for x, z in columns:
+            for y in range(self.sy - 3, 0, -1):
+                here = int(self.cells[x, y, z])
+                if not here or here in air:
+                    continue
+                if all(int(self.cells[x, y + step, z]) in air for step in (1, 2)):
+                    return x, y, z
+                break
+        return None
+
     def to_nbt(self) -> dict:
         blocks = []
         for x, y, z in zip(*(axis.tolist() for axis in np.nonzero(self.cells))):

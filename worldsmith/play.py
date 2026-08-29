@@ -237,6 +237,8 @@ def viewpoint_at_build(world, source, registries, structure_id: str, seed: int,
     so this needs no second pass over the finished world.
     """
     from .placement import set_reports
+    from .structures import rotate_xz
+    from .voxel import Grid
 
     structure = registries.get("structure", structure_id)
     if structure is None:
@@ -254,13 +256,20 @@ def viewpoint_at_build(world, source, registries, structure_id: str, seed: int,
     if not kept:
         return None
     best = min(kept, key=lambda r: abs(r.box[0]) + abs(r.box[1]))
-    x = (best.box[0] + best.box[2]) // 2
-    z = best.box[3] + 4                      # just outside one edge, looking in
-    ground = sample_terrain(world, x, z, 1, 1, step=1)
-    y = int(ground.surface_y[0, 0]) + 1
+
+    # stand on the build itself. The ground beside it cannot be worked out from
+    # the terrain alone: the game reshapes it around a structure, by up to ten
+    # blocks, and worldsmith's terrain does not model that.
+    grid = Grid.load(registries.templates[structure.get("start_pool", structure_id)])
+    spot = grid.standing_spot()
+    if spot is None:
+        return None
+    offset_x, offset_z = rotate_xz(spot[0], spot[2], grid.sx, grid.sz, best.rotation)
+    x, z = best.box[0] + offset_x, best.box[1] + offset_z
+    y = best.floor_y + spot[1] + 1
     middle = ((best.box[0] + best.box[2]) // 2, (best.box[1] + best.box[3]) // 2)
-    return Viewpoint(x, z, y, (middle[0], middle[1], best.surface_y + 8),
-                     f"beside {structure_id.split(':')[-1]}")
+    return Viewpoint(x, z, y, (middle[0], middle[1], best.floor_y + grid.sy),
+                     f"on {structure_id.split(':')[-1]}")
 
 
 def as_overworld(pack: Path, dimension_id: str, registries: Registries, work: Path) -> Path:
