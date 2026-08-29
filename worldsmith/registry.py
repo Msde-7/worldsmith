@@ -22,12 +22,19 @@ CATEGORIES = {
     "placed_feature": "worldgen/placed_feature",
     "dimension": "dimension",
     "dimension_type": "dimension_type",
+    # a custom build is a template under data/<ns>/structure/*.nbt plus these
+    # three: what it is, the pool holding its template, how often it appears
+    "structure": "worldgen/structure",
+    "template_pool": "worldgen/template_pool",
+    "structure_set": "worldgen/structure_set",
     # Biome tags are what put villages, temples and monuments in a custom world:
     # a structure generates in the biomes its has_structure/* tag lists. They are
     # loaded so they can be validated. Vanilla merges tags across packs unless an
     # entry sets "replace"; that is not modelled here, so a later pack simply wins.
     "biome_tag": "tags/worldgen/biome",
 }
+
+TEMPLATE_DIR = "structure"           # the .nbt builds themselves
 
 VANILLA_ROOT = Path(__file__).resolve().parent.parent / "vanilla"
 DEFAULT_VERSION = "26.2"
@@ -47,6 +54,12 @@ def _read_dir(root: Path, namespace: str, category: str) -> dict[str, dict]:
     return out
 
 
+def _read_templates(root: Path, namespace: str) -> dict[str, Path]:
+    base = root / "data" / namespace / TEMPLATE_DIR
+    return {f"{namespace}:{path.relative_to(base).as_posix()[:-len('.nbt')]}": path
+            for path in base.rglob("*.nbt")} if base.is_dir() else {}
+
+
 class Pack:
     """One datapack directory, or the vendored vanilla data."""
 
@@ -57,9 +70,11 @@ class Pack:
         data_dir = self.root / "data"
         self.namespaces = (sorted(p.name for p in data_dir.iterdir() if p.is_dir())
                            if data_dir.is_dir() else [])
+        self.templates: dict[str, Path] = {}
         for namespace in self.namespaces:
             for category in CATEGORIES:
                 self.data[category].update(_read_dir(self.root, namespace, category))
+            self.templates.update(_read_templates(self.root, namespace))
         mcmeta = self.root / "pack.mcmeta"
         self.mcmeta = json.loads(mcmeta.read_text(encoding="utf-8")) if mcmeta.is_file() else None
 
@@ -74,9 +89,11 @@ class Registries:
     def __init__(self, packs: list[Pack]):
         self.packs = packs
         self.data: dict[str, dict[str, dict]] = {c: {} for c in CATEGORIES}
+        self.templates: dict[str, Path] = {}
         for pack in packs:
             for category, entries in pack.data.items():
                 self.data[category].update(entries)
+            self.templates.update(pack.templates)
 
     @classmethod
     def load(cls, pack_paths: list[str | os.PathLike] | None = None, version: str = DEFAULT_VERSION,

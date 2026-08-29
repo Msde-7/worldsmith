@@ -797,6 +797,52 @@ def test_template_round_trip():
             check(f"bad state {spec} is refused", True)
 
 
+def test_structure_files():
+    """The four files a build needs, and the two defaults that are painful to
+    get wrong: a modern pool element would ignore the air a build hollows its
+    rooms with, and no heightmap projection would leave it at y=0."""
+    from worldsmith.pack import PackWriter
+    from worldsmith.registry import Registries
+    from worldsmith.structures import add, rotate_xz, spread
+    from worldsmith.voxel import Grid
+
+    grid = Grid(4, 3, 4)
+    grid.fill(0, 0, 0, 3, 0, 3, "minecraft:stone_bricks")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = PackWriter(Path(tmp) / "p", "test")
+        writer.mcmeta()
+        add(writer, "test:hut", grid, ["minecraft:plains"], sink=-1)
+        writer.add("structure_set", "test:huts",
+                   spread("test:hut", spacing=16, separation=7, salt=1))
+        registries = Registries.load([writer.root], include_vanilla=False)
+
+        check("the template lands where the game looks for it",
+              (writer.root / "data/test/structure/hut.nbt").is_file())
+        check("the registry finds the template",
+              "test:hut" in registries.templates, str(registries.templates))
+        structure = registries.get("structure", "test:hut")
+        pool = registries.get("template_pool", "test:hut")
+        placed = registries.get("structure_set", "test:huts")
+        check("the structure points at its pool",
+              structure["start_pool"] == "test:hut", str(structure))
+        check("the structure projects to the surface",
+              structure["project_start_to_heightmap"] == "WORLD_SURFACE_WG", str(structure))
+        check("the pool element keeps air",
+              pool["elements"][0]["element"]["element_type"]
+              == "minecraft:legacy_single_pool_element", str(pool))
+        check("the pool points at the template",
+              pool["elements"][0]["element"]["location"] == "test:hut", str(pool))
+        check("the set places the structure",
+              placed["structures"][0]["structure"] == "test:hut", str(placed))
+
+    check("a full turn is the identity",
+          rotate_xz(*rotate_xz(1, 0, 4, 4, "CLOCKWISE_180"), 4, 4, "CLOCKWISE_180") == (1, 0))
+    check("a quarter turn moves the corner",
+          rotate_xz(0, 0, 4, 4, "CLOCKWISE_90") == (3, 0),
+          str(rotate_xz(0, 0, 4, 4, "CLOCKWISE_90")))
+
+
 def main():
     test_kernel_matches_numpy()
     test_sampling_modes_agree()
@@ -820,6 +866,7 @@ def main():
     test_play_generates_structures()
     test_platform_paths()
     test_template_round_trip()
+    test_structure_files()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

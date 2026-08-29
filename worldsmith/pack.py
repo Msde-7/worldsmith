@@ -6,7 +6,7 @@ import os
 import zipfile
 from pathlib import Path
 
-from .registry import CATEGORIES, Registries
+from .registry import CATEGORIES, TEMPLATE_DIR, Registries
 from .templates import PACK_FORMAT, TEMPLATES
 
 
@@ -15,9 +15,9 @@ def write_json(path: Path, obj) -> None:
     path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def id_to_path(root: Path, category: str, ident: str) -> Path:
+def id_to_path(root: Path, folder: str, ident: str, suffix: str = ".json") -> Path:
     namespace, rel = ident.split(":", 1) if ":" in ident else ("minecraft", ident)
-    return root / "data" / namespace / CATEGORIES[category] / (rel + ".json")
+    return root / "data" / namespace / folder / (rel + suffix)
 
 
 class PackWriter:
@@ -40,8 +40,14 @@ class PackWriter:
         self.written.append(self.root / "pack.mcmeta")
 
     def add(self, category: str, ident: str, obj) -> Path:
-        path = id_to_path(self.root, category, ident)
+        path = id_to_path(self.root, CATEGORIES[category], ident)
         write_json(path, obj)
+        self.written.append(path)
+        return path
+
+    def add_template(self, ident: str, grid) -> Path:
+        """The build itself, as the .nbt the game reads."""
+        path = grid.save(id_to_path(self.root, TEMPLATE_DIR, ident, ".nbt"))
         self.written.append(path)
         return path
 
