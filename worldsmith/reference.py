@@ -285,6 +285,74 @@ CHECKING IT
   A custom biome file needs at least temperature, downfall, effects and
   (for 26.2) effects.water_color.
 """,
+    "builds": """PUTTING A BUILD IN A WORLD
+=========================
+A build is a box of blocks the game copies in: a template .nbt plus three JSON
+files. worldsmith.structures.add writes all four from a voxel.Grid.
+
+  data/<ns>/structure/<name>.nbt        the blocks
+  worldgen/structure/<name>.json        what it is, and where it may go
+  worldgen/template_pool/<name>.json    the pool holding the template
+  worldgen/structure_set/<name>s.json   how often, and how far apart
+
+  ==> THE ELEMENT TYPE
+      Use `legacy_single_pool_element`. The modern `single_pool_element`
+      ignores air in a template, so every room a build hollows out comes back
+      solid and every trench it digs comes back filled. This is silent.
+
+  ==> HOW HIGH IT LANDS
+      With project_start_to_heightmap set, the template's y=0 lands at
+      (heightmap at the site) + start_height. So a build whose floor is at
+      template y=N wants start_height {"absolute": -(N+1)} to sit flush.
+      Bury the courses below the floor: on a slope they are what stops the
+      build standing on a pillar of air.
+
+  ==> TERRAIN ADAPTATION
+      none          the ground is left exactly as it is
+      beard_thin    a skirt of dirt under the pieces; vanilla's villages
+      beard_box     the whole bounding box is cleared of terrain and supported;
+                    the ancient city uses it, and anything wider than a house
+                    wants it or a hillside will stand inside the walls
+      bury / encapsulate   for builds meant to be underground
+
+  ==> WHERE IT LANDS
+      random_spread picks one chunk in every spacing-by-spacing region of
+      chunks, from seed, region and salt. separation must be below spacing.
+      An exclusion_zone keeps one set away from another's sites.
+      `worldsmith sites <pack>` lists them without generating anything.
+
+  ==> THE ANCHOR, WHICH IS NOT THE MIDDLE
+      A jigsaw build is anchored at the chunk's MINIMUM corner and turned about
+      that corner, so the box grows away from it in a direction that depends on
+      a random rotation. The game then reads the ground height and the biome at
+      the MIDDLE of that box. For a 64 wide build those two points are 32
+      blocks apart, which is enough to be a different biome and a different
+      answer. `worldsmith render <pack> --builds` draws the real box.
+
+  ==> BIOMES
+      The biomes list is the whole placement rule the game gives you. Name
+      biomes your own dimension actually places, and remember that a pack that
+      controls its own terrain controls this: a biome that only exists on flat
+      ground is a rule that says "build on flat ground".
+
+  ==> WHAT WILL BITE
+      * a block state that does not parse is dropped, leaving a hole
+      * features are placed AFTER structures, so a grass courtyard grows a
+        wood. Pave anything you do not want trees in: gravel, dirt_path,
+        cobblestone and stone are not soil, coarse_dirt and podzol are
+      * chests need {"id": "minecraft:chest", "LootTable": "<table>"}
+      * vanilla's largest shipped template is 48 blocks across; 64 works, and
+        is the largest measured here
+      * check the size, `worldsmith build <pack>`, before wondering why a world
+        takes a while: a 64x52x64 build is a hundred thousand blocks per copy
+
+  ==> THE LOOP
+      worldsmith build  <pack> --id <id> --plan 10,17   look at it
+      worldsmith sites  <pack>                          where it lands, on what
+      worldsmith render <pack> --builds                 see that on the terrain
+      worldsmith check  <pack>                          the silent mistakes
+      worldsmith play   <pack>                          walk into it
+""",
     "mistakes": """MISTAKES THAT COST A WORLD RELOAD
 =================================
 * Missing a router field. All 15 are mandatory; the file is rejected wholesale.
@@ -308,6 +376,9 @@ CHECKING IT
   world has none until those tags list its biomes. A typo in one is silent:
   the tag is simply empty and no village is ever placed.
 * min_y/height not multiples of 16.
+* A build placed with single_pool_element instead of legacy_single_pool_element:
+  the air in its template is thrown away, so its rooms are solid. See
+  `reference builds`.
 * Overwriting data/minecraft/dimension/overworld.json and expecting an EXISTING
   world to change. Terrain settings are baked in at world creation.
 """,
