@@ -21,12 +21,12 @@ from .climate import PARAM_NAMES, BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
 from .draw import mark_builds, render_iso, render_plan
 from .pack import export_zip, scaffold
-from .placement import set_reports
-from .structures import rotate_xz
+from .placement import Site, set_reports
 from .reference import reference_text
 from .registry import Registries
 from .render import contact_sheet, render_biomes, render_height, render_map, render_section
 from .scene import build_scene
+from .structures import rotate_xz
 from .terrain import cell_interpolated, sample_terrain
 from .validate import ERROR, INFO, WARNING, Validator
 from .voxel import Grid
@@ -499,6 +499,26 @@ def cmd_inspect(args):
         print(f"  {args.pack} has no template for {args.structure}, nothing to compare")
         return 0
 
+    # the model predicted where this would land before the world existed, so
+    # say whether it was right
+    world_model, source, _ = _build_world(args, registries)
+    owner = next((ident for ident in registries.ids("structure_set")
+                  if any(e.get("structure") == args.structure
+                         for e in (registries.get("structure_set", ident) or {}).get("structures") or [])),
+                 None)
+    if owner:
+        site = Site(pick["chunk"][0], pick["chunk"][1])
+        predicted = next((r for r in set_reports(registries, world_model, source, owner,
+                                                 args.seed, site.x - 1, site.z - 1,
+                                                 site.x + 1, site.z + 1)
+                          if (r.site.chunk_x, r.site.chunk_z) == pick["chunk"]), None)
+        if predicted is not None:
+            agree = (predicted.floor_y == box[1] and predicted.rotation == pick["rotation"]
+                     and predicted.box[0] == box[0] and predicted.box[1] == box[2])
+            print(f"  the model said: {predicted.build.split(':')[-1]} at x {predicted.box[0]} "
+                  f"z {predicted.box[1]}, floor y {predicted.floor_y}, "
+                  f"{predicted.rotation.lower()}  ->  {'agrees' if agree else 'DISAGREES'}")
+
     template = Grid.load(path)
     placed = read_box(world, box[0], box[2], box[3], box[5], box[1], box[4])
     same, missing = 0, {}
@@ -632,6 +652,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("world", help="path to a world directory")
     p.add_argument("--pack", help="compare a placed build against this pack's template")
     p.add_argument("--version", default="26.2")
+    p.add_argument("--seed", type=int, default=12345,
+                   help="the seed the world was made with, to check the model against it")
+    p.add_argument("--dimension", help="dimension id, when the pack defines several")
     p.add_argument("--structure", help="which build to look at closely")
     p.add_argument("--index", type=int, default=0, help="which one of them, nearest first")
     p.add_argument("--render", help="draw it as it stands, to this file")

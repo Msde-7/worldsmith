@@ -656,6 +656,10 @@ class Validator:
         if isinstance(pool, str) and not self.has("template_pool", pool):
             self.add(ERROR, where, f"start_pool {pool} does not exist",
                      f"add worldgen/template_pool/{pool.split(':')[-1]}.json")
+        size = obj.get("size")
+        if isinstance(size, int) and size > 1:
+            self.add(INFO, where, f"size {size} lets the jigsaw expand past the first piece",
+                     "worldsmith's sites and --builds overlay describe the start piece only")
         step = obj.get("step")
         if step is not None and step not in GENERATION_STEPS:
             self.add(ERROR, where, f"step {step!r} is not a generation step",
