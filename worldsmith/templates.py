@@ -385,4 +385,36 @@ def template_basic(ns: str, name: str, *, caves: bool = False, decoration=None) 
     return files
 
 
+def starter_build(ns: str, biomes: list[str]) -> tuple:
+    """A small stone hut, scaffolded so a pack has a working build to change.
+
+    Deliberately plain and deliberately complete: a buried footing, a floor, a
+    doorway, a window, a light and a hollow inside, which is every part of a
+    build that has to be right before anything more interesting can be.
+    """
+    from .voxel import Grid
+
+    floor, height = 4, 5                     # footing below, walls above
+    grid = Grid(9, floor + height + 4, 9)
+    grid.fill(0, 0, 0, 8, floor - 1, 8, "minecraft:cobblestone")      # buried
+    grid.fill(0, floor, 0, 8, floor, 8, "minecraft:stone_bricks")     # the floor
+    for y in range(floor + 1, floor + height + 1):
+        grid.fill(0, y, 0, 8, y, 8, "minecraft:stone_bricks")
+        grid.fill(1, y, 1, 7, y, 7, "minecraft:air")
+    grid.fill(0, floor + height + 1, 0, 8, floor + height + 1, 8, "minecraft:oak_planks")
+    grid.fill(1, floor + height + 2, 1, 7, floor + height + 3, 7, "minecraft:air")
+    for x in (0, 8):                                                  # crenellations
+        for z in range(0, 9, 2):
+            grid.set(x, floor + height + 2, z, "minecraft:stone_brick_slab[type=bottom]")
+    for x in range(4, 5):                                             # a way in
+        grid.fill(x, floor + 1, 8, x, floor + 2, 8, "minecraft:air")
+        grid.set(x, floor + 1, 8, "minecraft:oak_door[facing=south,half=lower,hinge=left]")
+        grid.set(x, floor + 2, 8, "minecraft:oak_door[facing=south,half=upper,hinge=left]")
+    grid.set(0, floor + 3, 4, "minecraft:glass_pane")                 # and a look out
+    grid.set(8, floor + 3, 4, "minecraft:glass_pane")
+    grid.set(4, floor + 4, 4, "minecraft:lantern[hanging=true]")
+    grid.set(2, floor + 1, 2, "minecraft:chest[facing=east]",
+             {"id": "minecraft:chest", "LootTable": "minecraft:chests/simple_dungeon"})
+    return grid, -(floor + 1), biomes
+
 TEMPLATES = {"basic": template_basic}

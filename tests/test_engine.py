@@ -1223,6 +1223,39 @@ def test_packed_longs():
           len(unpack_longs(np.zeros(256, dtype=np.int64), 4, 4096)) == 4096)
 
 
+def test_scaffold_with_build():
+    """`new --with-build` has to produce a pack that loads, validates and has a
+    build the game would place, because it is the starting point every build
+    gets changed from."""
+    from worldsmith.pack import scaffold
+    from worldsmith.registry import Registries
+    from worldsmith.validate import ERROR, Validator
+    from worldsmith.voxel import Grid
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "p"
+        scaffold(root, "demo", "demo", with_build=True)
+        registries = Registries.load([root])
+        findings = Validator(registries, registries.packs[-1]).validate_pack()
+        errors = [f.format() for f in findings if f.level == ERROR]
+        check("a scaffolded pack with a build has no errors", not errors, str(errors))
+        check("the build is registered", "demo:hut" in registries.templates,
+              str(registries.templates))
+        for category in ("structure", "template_pool", "structure_set"):
+            check(f"the scaffold writes the {category}",
+                  bool(registries.packs[-1].data[category]),
+                  str(registries.packs[-1].data[category]))
+        grid = Grid.load(registries.templates["demo:hut"])
+        check("the scaffolded build is hollow", grid.name_at(4, 6, 4) == "air",
+              grid.name_at(4, 6, 4))
+        check("the scaffolded build has somewhere to stand",
+              grid.standing_spot() is not None)
+        structure = registries.get("structure", "demo:hut")
+        check("the scaffolded build is keyed to a biome the pack places",
+              set(structure["biomes"]) & set(registries.packs[-1].data["biome"]),
+              str(structure["biomes"]))
+
+
 def main():
 
 
@@ -1255,6 +1288,7 @@ def main():
     test_template_validation()
     test_build_overlay_and_determinism()
     test_packed_longs()
+    test_scaffold_with_build()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

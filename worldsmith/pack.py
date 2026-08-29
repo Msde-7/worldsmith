@@ -7,7 +7,7 @@ import zipfile
 from pathlib import Path
 
 from .registry import CATEGORIES, TEMPLATE_DIR, Registries
-from .templates import PACK_FORMAT, TEMPLATES
+from .templates import PACK_FORMAT, TEMPLATES, starter_build
 
 
 def write_json(path: Path, obj) -> None:
@@ -79,7 +79,7 @@ def decoration_of(biome_id: str, version: str = "26.2") -> dict:
 def scaffold(root, namespace: str, name: str, template: str = "basic",
              description: str = "", version: str = "26.2",
              replace_overworld: bool = False, caves: bool = False,
-             like: str | None = None) -> PackWriter:
+             like: str | None = None, with_build: bool = False) -> PackWriter:
     """Create a complete, loadable pack to edit."""
     if template not in TEMPLATES:
         raise ValueError(f"unknown template '{template}' (have: {', '.join(sorted(TEMPLATES))})")
@@ -91,6 +91,14 @@ def scaffold(root, namespace: str, name: str, template: str = "basic",
     if replace_overworld:
         dimension = files["dimension"][f"{namespace}:{name}"]
         writer.add("dimension", "minecraft:overworld", dimension)
+    if with_build:
+        from . import structures
+        biomes = sorted(files["biome"])
+        grid, sink, biomes = starter_build(namespace, biomes)
+        structures.add(writer, f"{namespace}:hut", grid, biomes, sink=sink)
+        writer.add("structure_set", f"{namespace}:huts",
+                   structures.spread(f"{namespace}:hut", spacing=12, separation=5,
+                                     salt=abs(hash(namespace)) % 1000000))
     return writer
 
 

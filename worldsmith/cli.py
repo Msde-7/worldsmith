@@ -102,13 +102,17 @@ def cmd_new(args):
         writer = scaffold(root, args.namespace, args.name, template=args.template,
                           description=args.description, version=args.version,
                           replace_overworld=args.replace_overworld,
-                          caves=args.caves, like=args.like)
+                          caves=args.caves, like=args.like,
+                          with_build=args.with_build)
     except ValueError as exc:            # unknown template or --like biome
         raise SystemExit(str(exc))
     print(f"created {root} ({len(writer.written)} files)")
     for rel in writer.relative():
         print("  ", rel)
     print(f"\nnext:  worldsmith render {root} --dimension {args.namespace}:{args.name}")
+    if args.with_build:
+        print(f"       worldsmith build  {root} --id {args.namespace}:hut --plan 4,6")
+        print(f"       worldsmith sites  {root}")
     return 0
 
 
@@ -398,15 +402,21 @@ def cmd_build(args):
         raise SystemExit(f"no build {args.id} (have: {', '.join(sorted(templates))})")
 
     grid = Grid.load(templates[args.id])
+    levels = []
+    if args.plan:
+        try:
+            levels = [int(v) for v in args.plan.split(",")]
+        except ValueError:
+            raise SystemExit(f"--plan takes heights like 8,14 (got {args.plan!r})")
+        bad = [v for v in levels if not 0 <= v < grid.sy]
+        if bad:
+            raise SystemExit(f"--plan level(s) {bad} are outside 0..{grid.sy - 1}")
+
     name = args.id.split(":")[-1].replace("/", "_")
     out = Path(args.out) if args.out else Path("renders") / f"{name}.png"
     render_iso(grid, out, scale=args.scale, turn=args.turn, label=args.id)
     print(f"wrote {out}  ({grid.sx}x{grid.sy}x{grid.sz}, {grid.filled()} blocks)")
-    if args.plan:
-        levels = [int(v) for v in args.plan.split(",")]
-        bad = [v for v in levels if not 0 <= v < grid.sy]
-        if bad:
-            raise SystemExit(f"--plan level(s) {bad} are outside 0..{grid.sy - 1}")
+    if levels:
         plan = out.with_name(out.stem + "_plan.png")
         render_plan(grid, plan, levels, scale=max(2, args.scale // 2), label=args.id)
         print(f"wrote {plan}  (levels {', '.join(str(v) for v in levels)})")
@@ -442,6 +452,10 @@ def cmd_sites(args):
             print(f"    {report.build.split(':')[-1]:16s} x {report.box[0]:7d} z {report.box[1]:7d}  "
                   f"{report.biome.split(':')[-1]:14s} ground y {report.surface_y:3d}  "
                   f"relief {report.relief:3d}  water {report.water * 100:3.0f}%  {verdict}")
+        drowned = [r for r in kept if r.water >= 0.5]
+        if drowned:
+            print(f"  {len(drowned)} of the kept sites are mostly under water; the biome "
+                  f"check passed but the ground did not")
         if kept:
             worst = max(kept, key=lambda r: r.relief)
             print(f"  roughest ground under a kept build: {worst.relief} blocks "
@@ -578,6 +592,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--like", metavar="BIOME",
                    help="borrow the trees, ores, mobs and carvers of a vanilla biome, "
                         "e.g. minecraft:plains (the game places them; the preview does not)")
+    p.add_argument("--with-build", action="store_true",
+                   help="also scaffold a small build, placed in the pack's biomes")
     p.add_argument("--force", action="store_true")
     p.set_defaults(func=cmd_new)
 
