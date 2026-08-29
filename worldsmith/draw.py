@@ -15,6 +15,8 @@ from .colors import block_color
 from .voxel import Grid
 
 BACKGROUND = (26, 28, 34)
+KEPT = (255, 214, 102)
+REJECTED = (150, 156, 170)
 LABEL = (210, 214, 224)
 FADED = (150, 156, 170)
 FACE_SHADE = (1.0, 0.72, 0.55)          # top, right, front
@@ -105,3 +107,29 @@ def render_plan(grid: Grid, path, levels: list[int], scale: int = 4,
     path.parent.mkdir(parents=True, exist_ok=True)
     image.save(path)
     return path
+
+
+def mark_builds(image, reports, x0: int, z0: int, step: int, scale: int):
+    """Outline where builds land on a rendered map.
+
+    The map is drawn at `scale` pixels per `step` blocks, so a footprint in
+    blocks becomes a rectangle in pixels. Sites the biome check rejects are
+    drawn faintly: seeing where a build nearly went is half of why the picture
+    is worth looking at.
+    """
+    draw = ImageDraw.Draw(image)
+    for report in reports:
+        bx0, bz0, bx1, bz1 = report.box
+        px0 = round((bx0 - x0) / step * scale)
+        pz0 = round((bz0 - z0) / step * scale)
+        px1 = round((bx1 + 1 - x0) / step * scale) - 1
+        pz1 = round((bz1 + 1 - z0) / step * scale) - 1
+        if px1 < 0 or pz1 < 0 or px0 >= image.width or pz0 >= image.height:
+            continue
+        colour = KEPT if report.accepted else REJECTED
+        if px1 - px0 < 3 or pz1 - pz0 < 3:
+            draw.rectangle([px0 - 2, pz0 - 2, px0 + 2, pz0 + 2], outline=colour)
+        else:
+            draw.rectangle([px0, pz0, px1, pz1], outline=colour,
+                           width=2 if report.accepted else 1)
+    return image

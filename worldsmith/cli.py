@@ -18,7 +18,7 @@ import numpy as np
 from . import play as play_mod
 from .climate import PARAM_NAMES, BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
-from .draw import render_iso, render_plan
+from .draw import mark_builds, render_iso, render_plan
 from .pack import export_zip, scaffold
 from .placement import set_sites, survey
 from .reference import reference_text
@@ -146,6 +146,32 @@ def cmd_check(args):
     return 1 if counts[ERROR] else 0
 
 
+def _site_reports(args, world, source, x0, z0, span):
+    """Every build site in a rendered area, for the overlay and for `sites`."""
+    registries = Registries.load([args.pack], version=args.version) if args.pack else None
+    if registries is None:
+        return []
+    reports = []
+    for set_id in sorted(registries.packs[-1].data["structure_set"]):
+        entry = registries.get("structure_set", set_id) or {}
+        members = [e["structure"] for e in entry.get("structures") or []]
+        structure = registries.get("structure", members[0]) if members else None
+        if structure is None:
+            continue
+        template = registries.templates.get(structure.get("start_pool", ""))
+        size = (1, 1)
+        if template is not None:
+            grid = Grid.load(template)
+            size = (grid.sx, grid.sz)
+        biomes = structure.get("biomes")
+        found = set_sites(registries, set_id, args.seed, x0, z0, x0 + span - 1, z0 + span - 1)
+        reports += survey(world, source, found, seed=args.seed,
+                          biomes=None if isinstance(biomes, str) else biomes,
+                          sink=int((structure.get("start_height") or {}).get("absolute", 0)),
+                          size=size)
+    return reports
+
+
 def cmd_render(args):
     started = time.time()
     world, source, label = _load(args)
@@ -168,10 +194,17 @@ def cmd_render(args):
     panels = []
     if "map" in views:
         decorate = getattr(args, "decorate", False)
+        surface = render_map(scene, scale=args.scale, decorate=decorate)
+        note = ""
+        if getattr(args, "builds", False):
+            reports = _site_reports(args, world, source, x0, z0, n * step)
+            mark_builds(surface, reports, x0, z0, step, args.scale)
+            kept = sum(1 for r in reports if r.accepted)
+            note = f"   {kept} of {len(reports)} build sites kept"
         panels.append((f"surface  {n * step}x{n * step} blocks @ ({args.center[0]},{args.center[1]})  "
                        f"1px = {step}b" + ("   canopy estimated from the biomes' features"
-                                           if decorate else ""),
-                       render_map(scene, scale=args.scale, decorate=decorate)))
+                                           if decorate else "") + note,
+                       surface))
     if "height" in views:
         panels.append((f"elevation  y {stats['min_y']}..{stats['max_y']}  contours every 16",
                        render_height(scene.terrain, scale=args.scale)))
@@ -488,6 +521,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--center", type=int, nargs=2, default=[0, 0], metavar=("X", "Z"))
     p.add_argument("--views", default="map,height,biomes,section")
     p.add_argument("--columns", type=int, default=2)
+    p.add_argument("--builds", action="store_true",
+                   help="outline where this pack's builds land")
     p.add_argument("--decorate", action="store_true",
                    help="stipple the canopy the biomes' tree features imply (an estimate, "
                         "not a placement)")
