@@ -179,9 +179,20 @@ castle:great_castles  spacing 24, separation 10
 
 That model is checked against Minecraft rather than trusted:
 `tools/verify_placement.py` drops a build into an ordinary vanilla world and
-compares site for site. 337 of 337 for a one block build, 151 of 151 for a
-sixty-four block one, and every site of a pack with two sets and an exclusion
-zone between them.
+compares site for site, then reads the blocks back out of the region files.
+
+| probe | sites | blocks read back |
+|---|---|---|
+| 1 block build, linear spread | 337 of 337 | |
+| 64 block build | 151 of 151 | |
+| 96 block build | 85 of 85 | 9216 of 9216 |
+| 8 block build, triangular spread | 55 of 55 | 64 of 64 |
+| a pack with two sets and an exclusion zone | 55 of 55 | |
+
+The rotation the game gives each build matches on all 86 it recorded, the build
+it draws from a weighted set on all 46, and the height a build lands at on all
+46. `worldsmith inspect` makes the same comparison about a world you already
+have.
 
 ![a castle as the game built it](renders/final_great_castle.png)
 

@@ -130,6 +130,14 @@ What will bite, in order of how much time it costs:
   whole box. Anything wider than a house needs it.
 * **Block states.** They are checked against the real block list as you write
   them, so a typo raises here rather than vanishing in game.
+* **Size.** Vanilla ships nothing wider than 48 blocks; 96 is checked here and
+  places every block. A 64x52x64 build is a hundred thousand blocks per copy,
+  which is what makes a world slow to generate, not the count of builds.
+* **The ground around a build is not the ground you rendered.** The game
+  reshapes terrain against a structure by ten blocks or more, and worldsmith's
+  terrain does not model that. `sites` relief is the ground before the build
+  lands, which is the number that says whether it will look wrong. Never place
+  anything relative to the terrain right beside a build.
 
 After a world exists, check what the game actually did:
 
@@ -138,8 +146,9 @@ python -m worldsmith.cli inspect <world> --pack packs/keep --structure keep:towe
 ```
 
 It lists every placed build, and with `--pack` compares the placed blocks
-against the template block for block. Anything under about 99% that is not ore
-in the buried footing is worth reading.
+against the template block for block, and says whether the placement model
+called that site right. Anything under about 99% that is not ore in the buried
+footing, or trees in something meant to be overgrown, is worth reading.
 
 ## Before writing any JSON
 

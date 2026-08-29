@@ -318,8 +318,10 @@ files. worldsmith.structures.add writes all four from a voxel.Grid.
   ==> WHERE IT LANDS
       random_spread picks one chunk in every spacing-by-spacing region of
       chunks, from seed, region and salt. separation must be below spacing.
-      An exclusion_zone keeps one set away from another's sites.
-      `worldsmith sites <pack>` lists them without generating anything.
+      spread_type linear or triangular, the second clustering toward the middle
+      of a region. An exclusion_zone keeps one set away from another's sites.
+      A set holding several builds draws one per site by weight.
+      `worldsmith sites <pack>` lists all of that without generating anything.
 
   ==> THE ANCHOR, WHICH IS NOT THE MIDDLE
       A jigsaw build is anchored at the chunk's MINIMUM corner and turned about
@@ -341,10 +343,21 @@ files. worldsmith.structures.add writes all four from a voxel.Grid.
         wood. Pave anything you do not want trees in: gravel, dirt_path,
         cobblestone and stone are not soil, coarse_dirt and podzol are
       * chests need {"id": "minecraft:chest", "LootTable": "<table>"}
-      * vanilla's largest shipped template is 48 blocks across; 64 works, and
-        is the largest measured here
+      * size: vanilla ships nothing above 48 blocks across. 96 works, checked
+        against a server with every one of its 9216 floor blocks in place
       * check the size, `worldsmith build <pack>`, before wondering why a world
         takes a while: a 64x52x64 build is a hundred thousand blocks per copy
+
+  ==> THE GROUND AROUND IT IS NOT THE GROUND YOU RENDERED
+      terrain_adaptation reshapes the terrain against the build, by ten blocks
+      or more, and worldsmith's terrain does not model that. So `sites` relief
+      is the ground before the build lands, which is the right number for "will
+      this look wrong", and anything that needs the ground after it lands has to
+      read the finished world:
+
+        worldsmith inspect <world> --pack <pack> --structure <id>
+
+      which also says whether the model called that site right.
 
   ==> THE LOOP
       worldsmith build  <pack> --id <id> --plan 10,17   look at it
