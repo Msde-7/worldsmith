@@ -157,7 +157,9 @@ structures.add(writer, "keep:tower", grid, ["minecraft:plains"], sink=-9)
 ![ruined castle](renders/castle_ruin_iso.png)
 
 ```bash
+worldsmith new    packs/keep --with-build   # start from a build that works
 worldsmith build  packs/keep --id keep:tower --plan 8,14   # draw it
+worldsmith build  packs/keep --id keep:tower --site 0      # draw it on its ground
 worldsmith sites  packs/keep            # where it lands, and on what ground
 worldsmith render packs/keep --builds   # those sites, on the terrain
 worldsmith play   packs/keep --spawn-at keep:tower
@@ -251,6 +253,7 @@ worldsmith column  packs/mine --at 100 -200      # one column, top to bottom
 
 worldsmith build   packs/mine                    # the builds in a pack
 worldsmith build   packs/mine --id mine:tower --plan 8,14
+worldsmith build   packs/mine --id mine:tower --site 0   # standing on its ground
 worldsmith sites   packs/mine                    # where they land, and on what
 worldsmith render  packs/mine --builds           # that, drawn on the terrain
 worldsmith inspect <world> --pack packs/mine --structure mine:tower

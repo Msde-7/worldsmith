@@ -360,7 +360,9 @@ files. worldsmith.structures.add writes all four from a voxel.Grid.
       which also says whether the model called that site right.
 
   ==> THE LOOP
+      worldsmith new    <pack> --with-build             start from one that works
       worldsmith build  <pack> --id <id> --plan 10,17   look at it
+      worldsmith build  <pack> --id <id> --site 0       look at it on its ground
       worldsmith sites  <pack>                          where it lands, on what
       worldsmith render <pack> --builds                 see that on the terrain
       worldsmith check  <pack>                          the silent mistakes

@@ -74,6 +74,16 @@ or both. Read the reference before writing one:
 python -m worldsmith.cli reference builds
 ```
 
+Start from something that already works rather than an empty file:
+
+```
+python -m worldsmith.cli new packs/keep --namespace keep --name keep --with-build
+```
+
+That scaffolds a small hut with every part a build has to get right (a buried
+footing, hollow rooms, a door, a light, a loot chest) plus the three JSON files
+that place it. Then replace the geometry.
+
 A build is a box of blocks plus three JSON files, and `structures.add` writes
 all four. Put the geometry in a script under `tools/` and keep it there, so a
 build can be re-run and changed:
@@ -103,11 +113,15 @@ Then the same loop as terrain, with the same rule: **look at the picture**.
 
 ```
 python -m worldsmith.cli build  packs/keep --id keep:tower --plan 8,14   # draw it
+python -m worldsmith.cli build  packs/keep --id keep:tower --site 0     # on its ground
 python -m worldsmith.cli sites  packs/keep            # where it lands, on what ground
 python -m worldsmith.cli render packs/keep --builds   # those sites on the terrain
 python -m worldsmith.cli check  packs/keep            # the silent mistakes
 python -m worldsmith.cli play   packs/keep --spawn-at keep:tower
 ```
+
+`build --site 0` is the one to look at: the build standing on the terrain of
+the site the game will actually choose, drawn without generating a world.
 
 `sites` is the one to read carefully. It lists every site the game will
 consider, whether the biome check keeps it, and the ground under the footprint:
