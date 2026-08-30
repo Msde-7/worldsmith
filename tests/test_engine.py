@@ -1301,7 +1301,8 @@ def test_cli_smoke():
     import io
 
     from worldsmith.cli import main
-    from worldsmith.pack import scaffold
+    from worldsmith.pack import PackWriter, scaffold
+    from worldsmith.structures import pool, structure
 
     def run(argv):
         """Quietly: these commands are chatty and the suite prints its own summary."""
@@ -1333,6 +1334,25 @@ def test_cli_smoke():
         check("build --id wrote a drawing", out.is_file())
         check("build --plan wrote the slices too",
               out.with_name(out.stem + "_plan.png").is_file())
+
+        # a placement worldsmith does not model, and a tag it cannot expand:
+        # both are things a pack from elsewhere will have, and neither may crash
+        writer = PackWriter(root, "demo")
+        writer.add("structure_set", "demo:rings", {
+            "structures": [{"structure": "demo:hut", "weight": 1}],
+            "placement": {"type": "minecraft:concentric_rings", "distance": 32,
+                          "spread": 3, "count": 128}})
+        writer.add("structure", "demo:tagged", structure("demo:hut", "#demo:nowhere"))
+        writer.add("template_pool", "demo:tagged", pool("demo:hut"))
+        writer.add("structure_set", "demo:tagged", {
+            "structures": [{"structure": "demo:tagged", "weight": 1}],
+            "placement": {"type": "minecraft:random_spread", "spacing": 16,
+                          "separation": 7, "salt": 3}})
+        check("a placement that is not modelled is reported, not raised",
+              run(["sites", str(root), "--area", "256"]) == 0)
+        check("a tag that cannot be expanded is reported, not raised",
+              run(["render", str(root), "--builds", "--size", "128", "--step", "8",
+                   "--views", "map", "--out", str(Path(tmp) / "m2.png")]) == 0)
 
         for argv, why in ((["build", str(root), "--id", "demo:nope"], "an unknown build"),
                           (["sites", str(root), "--set", "demo:nope"], "an unknown set"),

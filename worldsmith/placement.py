@@ -143,8 +143,11 @@ def region_chunk(seed: int, placement: dict, region_x: int, region_z: int) -> Si
 
 def sites(placement: dict, seed: int, x0: int, z0: int, x1: int, z1: int) -> list[Site]:
     """Every site whose chunk falls in this block area."""
+    kind = placement.get("type", "minecraft:random_spread")
+    if kind != "minecraft:random_spread":
+        raise NotImplementedError(f"{kind} placement is not modelled")
     if float(placement.get("frequency", 1.0)) < 1.0:
-        raise NotImplementedError("only frequency 1.0 is modelled")
+        raise NotImplementedError("only frequency below 1 is not modelled")
     spacing = int(placement["spacing"])
     chunks = [c // 16 for c in (x0, z0, x1, z1)]
     regions_x = range(chunks[0] // spacing, chunks[2] // spacing + 1)

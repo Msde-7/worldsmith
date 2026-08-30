@@ -332,10 +332,12 @@ files. worldsmith.structures.add writes all four from a voxel.Grid.
       answer. `worldsmith render <pack> --builds` draws the real box.
 
   ==> BIOMES
-      The biomes list is the whole placement rule the game gives you. Name
-      biomes your own dimension actually places, and remember that a pack that
-      controls its own terrain controls this: a biome that only exists on flat
-      ground is a rule that says "build on flat ground".
+      The biomes list is the whole placement rule the game gives you. Either a
+      list of ids or a tag ("#minecraft:is_forest"), and worldsmith expands
+      vanilla's tags, so `sites` filters on a tag the way the game does.
+      Name biomes your own dimension actually places, and remember that a pack
+      that controls its own terrain controls this: a biome that only exists on
+      flat ground is a rule that says "build on flat ground".
 
   ==> WHAT WILL BITE
       * a block state that does not parse is dropped, leaving a hole

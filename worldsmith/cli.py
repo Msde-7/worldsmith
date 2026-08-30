@@ -159,8 +159,11 @@ def _site_reports(args, world, source, x0, z0, span):
     registries = Registries.load([args.pack], version=args.version)
     reports = []
     for set_id in sorted(registries.packs[-1].data["structure_set"]):
-        reports += set_reports(registries, world, source, set_id, args.seed,
-                               x0, z0, x0 + span - 1, z0 + span - 1, ground=False)
+        try:
+            reports += set_reports(registries, world, source, set_id, args.seed,
+                                   x0, z0, x0 + span - 1, z0 + span - 1, ground=False)
+        except NotImplementedError as exc:
+            print(f"note: {set_id} not drawn, {exc}", file=sys.stderr)
     return reports
 
 
@@ -450,9 +453,20 @@ def cmd_sites(args):
         if entry is None:
             raise SystemExit(f"unknown structure set {set_id}")
         placement = entry.get("placement") or {}
-        reports = set_reports(registries, world, source, set_id, args.seed, *box)
+        try:
+            reports = set_reports(registries, world, source, set_id, args.seed, *box)
+        except NotImplementedError as exc:
+            print()
+            print(f"{set_id}: {exc}")
+            continue
         kept = [r for r in reports if r.accepted]
+        unfiltered = any(registries.biome_set(
+            (registries.get("structure", r.build) or {}).get("biomes")) is None
+            for r in reports)
         print()
+        if unfiltered:
+            print(f"{set_id}: the biome tag it names is not here to expand, so every "
+                  "site below reads as kept")
         print(f"{set_id}  spacing {placement.get('spacing')}, "
               f"separation {placement.get('separation')}")
         print(f"  {len(kept)} of {len(reports)} sites kept")
@@ -467,7 +481,8 @@ def cmd_sites(args):
                   f"check passed but the ground did not")
         if kept:
             worst = max(kept, key=lambda r: r.relief)
-            print(f"  roughest ground under a kept build: {worst.relief} blocks "
+            plural = "" if worst.relief == 1 else "s"
+            print(f"  roughest ground under a kept build: {worst.relief} block{plural} "
                   f"under {worst.build.split(':')[-1]} at x {worst.box[0]} z {worst.box[1]}")
     return 0
 

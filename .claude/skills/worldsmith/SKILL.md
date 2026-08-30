@@ -105,6 +105,7 @@ writer = PackWriter("packs/keep", "a keep")
 writer.mcmeta()
 structures.add(writer, "keep:tower", grid, ["minecraft:plains", "minecraft:forest"],
                sink=-9)                       # floor at y=8, so -(8+1)
+# or name them with a tag: structures.add(..., "#minecraft:is_forest", ...)
 writer.add("structure_set", "keep:towers",
            structures.spread("keep:tower", spacing=16, separation=7, salt=771223))
 ```
