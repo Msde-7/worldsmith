@@ -88,9 +88,15 @@ A build is a box of blocks plus three JSON files, and `structures.add` writes
 all four. Put the geometry in a script under `tools/` and keep it there, so a
 build can be re-run and changed:
 
+`worldsmith.shapes` has the geometry rather than writing loops for it: `speckle`
+(masonry mixed from several blocks so a wall does not read as extruded),
+`hollow_box`, `cylinder`, `perimeter`, `ring_cells`, `crenellate`, `gable_roof`
+and `stair_flight`.
+
 ```python
 from worldsmith import structures
 from worldsmith.pack import PackWriter
+from worldsmith.shapes import crenellate, hollow_box, perimeter, speckle
 from worldsmith.voxel import Grid
 
 grid = Grid(32, 24, 32)                       # x, y, z

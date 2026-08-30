@@ -288,7 +288,10 @@ CHECKING IT
     "builds": """PUTTING A BUILD IN A WORLD
 =========================
 A build is a box of blocks the game copies in: a template .nbt plus three JSON
-files. worldsmith.structures.add writes all four from a voxel.Grid.
+files. worldsmith.structures.add writes all four from a voxel.Grid, and
+worldsmith.shapes has the geometry a build is made of: speckle for masonry that
+does not read as extruded, hollow_box, cylinder, perimeter and ring_cells,
+crenellate, gable_roof and stair_flight.
 
   data/<ns>/structure/<name>.nbt        the blocks
   worldgen/structure/<name>.json        what it is, and where it may go

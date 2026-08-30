@@ -1413,7 +1413,90 @@ def test_biome_tags_resolve():
               any("biome tag" in f for f in found), str(found))
 
 
+def test_shapes():
+    """The geometry every build is made of. Each of these was written once by
+    hand for a build and got something subtly wrong the first time."""
+    from worldsmith.shapes import (crenellate, cylinder, fill, gable_roof, hollow_box,
+                                   perimeter, ring_cells, speckle, stair_flight)
+    from worldsmith.voxel import Grid
+
+    mix = [(3, "minecraft:stone"), (1, "minecraft:cobblestone")]
+    picks = [speckle(x, 0, z, mix) for x in range(40) for z in range(40)]
+    check("speckle only returns blocks from the mix",
+          set(picks) <= {"minecraft:stone", "minecraft:cobblestone"}, str(set(picks)))
+    check("speckle answers the same for the same block",
+          speckle(3, 4, 5, mix) == speckle(3, 4, 5, mix))
+    share = picks.count("minecraft:stone") / len(picks)
+    check("speckle follows the weights", 0.68 < share < 0.82, f"{share:.2f}")
+
+    grid = Grid(9, 6, 9)
+    fill(grid, 0, 0, 0, 8, 0, 8, lambda x, y, z: speckle(x, y, z, mix))
+    check("fill takes a function as well as a block",
+          {grid.name_at(x, 0, z) for x in range(9) for z in range(9)}
+          == {"stone", "cobblestone"})
+
+    hollow_box(grid, 0, 1, 0, 8, 4, 8, "minecraft:stone_bricks")
+    check("a hollow box has walls", grid.name_at(0, 2, 4) == "stone_bricks")
+    check("a hollow box is hollow", grid.name_at(4, 2, 4) == "air")
+    check("a hollow box keeps its corners", grid.name_at(8, 4, 8) == "stone_bricks")
+    check("a hollow box leaves one block of wall",
+          grid.name_at(1, 2, 4) == "air" and grid.name_at(0, 2, 4) == "stone_bricks")
+
+    round_grid = Grid(21, 4, 21)
+    cylinder(round_grid, 10.5, 10.5, 8.0, 0, 3, "minecraft:stone", inner="minecraft:air")
+    check("a cylinder is solid at its edge", round_grid.name_at(10, 1, 3) == "stone")
+    check("a cylinder is hollow inside", round_grid.name_at(10, 1, 10) == "air")
+    check("a cylinder stops at its radius", round_grid.name_at(10, 1, 0) == "")
+    edge = ring_cells(10.5, 10.5, 8.0, size=(21, 21))
+    check("a ring is a closed run of cells", len(edge) > 30, str(len(edge)))
+    check("a ring runs around, not across",
+          all(abs(a[0] - b[0]) <= 3 and abs(a[1] - b[1]) <= 3
+              for a, b in zip(edge, edge[1:])), "the ring jumps")
+
+    walk = perimeter(0, 0, 8, 8)
+    check("a perimeter visits every edge cell once",
+          len(walk) == len(set(walk)) == 32, f"{len(walk)} cells, {len(set(walk))} unique")
+    check("a perimeter is a closed walk",
+          all(abs(a[0] - b[0]) + abs(a[1] - b[1]) == 1
+              for a, b in zip(walk, walk[1:] + walk[:1])), "the walk jumps")
+
+    top = Grid(9, 2, 9)
+    crenellate(top, walk, 1, "minecraft:stone")
+    solid = [top.name_at(x, 1, z) == "stone" for x, z in walk]
+    check("crenellations are two on and one off",
+          solid[:6] == [True, True, False, True, True, False], str(solid[:6]))
+    check("crenellations leave the gaps open", solid.count(False) == len(walk) // 3,
+          f"{solid.count(False)} gaps in {len(walk)}")
+
+    roof = Grid(9, 12, 9)
+    ridge = gable_roof(roof, 0, 1, 8, 7, 6, "spruce")
+    # nine wide closes in five courses, so the ridge is four above the eaves
+    check("a gable roof closes to a ridge", ridge == 10, str(ridge))
+    check("a gable roof is stairs on the outside",
+          roof.name_at(0, 6, 4) == "spruce_stairs", roof.name_at(0, 6, 4))
+    check("a gable roof is hollow under its pitch", roof.name_at(4, 6, 4) == "air",
+          roof.name_at(4, 6, 4))
+    check("a gable roof has a ceiling under it",
+          roof.name_at(4, 5, 4) == "spruce_planks", roof.name_at(4, 5, 4))
+    check("a gable roof leaves a roof space",
+          all(roof.name_at(4, level, 4) == "air" for level in (6, 7, 8, 9)),
+          str([roof.name_at(4, level, 4) for level in (6, 7, 8, 9)]))
+
+    steps = Grid(12, 12, 12)
+    end = stair_flight(steps, 1, 1, 1, "south", 6)
+    check("a flight arrives where it says", end == (1, 7, 7), str(end))
+    check("a flight climbs one block per step",
+          steps.name_at(1, 3, 3) == "stone_brick_stairs", steps.name_at(1, 3, 3))
+    check("a flight clears the space above it", steps.name_at(1, 5, 3) == "air")
+    try:
+        stair_flight(steps, 1, 1, 1, "up", 3)
+        check("a flight refuses a direction that is not one", False, "accepted 'up'")
+    except ValueError:
+        check("a flight refuses a direction that is not one", True)
+
+
 def main():
+
 
 
     test_kernel_matches_numpy()
@@ -1449,6 +1532,7 @@ def main():
     test_build_on_site()
     test_cli_smoke()
     test_biome_tags_resolve()
+    test_shapes()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)
