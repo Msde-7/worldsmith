@@ -1343,6 +1343,56 @@ def test_cli_smoke():
                   str(code))
 
 
+def test_biome_tags_resolve():
+    """A structure usually names its biomes with a tag, and vanilla's tags name
+    each other, so "where will this build go" needs them expanded rather than
+    waved through."""
+    from worldsmith.registry import Registries
+
+    registries = Registries.load()
+    forest = registries.biome_set("#minecraft:is_forest")
+    check("a tag expands to the biomes it lists",
+          forest and "minecraft:birch_forest" in forest, str(forest))
+    ocean = registries.biome_set("#minecraft:is_ocean")
+    check("a tag that names another tag expands through it",
+          ocean and "minecraft:deep_frozen_ocean" in ocean, str(ocean))
+    check("a list of ids and tags together expands to both",
+          registries.biome_set(["minecraft:desert", "#minecraft:is_forest"])
+          == forest | {"minecraft:desert"})
+    check("a tag that is not here expands to nothing rather than a guess",
+          registries.biome_set("#minecraft:no_such_tag") is None)
+    check("an id without a namespace is still an id",
+          registries.biome_set(["plains"]) == {"minecraft:plains"})
+    check("a tag entry written as an object is read too",
+          registries.biome_set([{"id": "minecraft:plains", "required": False}])
+          == {"minecraft:plains"})
+
+    from worldsmith.pack import PackWriter
+    from worldsmith.structures import pool, spread, structure
+    from worldsmith.validate import Validator
+    from worldsmith.voxel import Grid
+
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = PackWriter(Path(tmp) / "p", "test")
+        writer.mcmeta()
+        hut = Grid(2, 2, 2)
+        hut.fill(0, 0, 0, 1, 0, 1, "minecraft:stone_bricks")
+        writer.add_template("test:hut", hut)
+        writer.add("structure", "test:hut", structure("test:hut", "#minecraft:is_forest"))
+        writer.add("template_pool", "test:hut", pool("test:hut"))
+        writer.add("structure_set", "test:huts",
+                   spread("test:hut", spacing=8, separation=3, salt=1))
+        loaded = Registries.load([writer.root])
+        clean = [f.format() for f in Validator(loaded, loaded.packs[-1]).validate_pack()]
+        check("a build keyed to a real tag validates", not clean, str(clean))
+
+        writer.add("structure", "test:hut", structure("test:hut", "#minecraft:not_a_tag"))
+        loaded = Registries.load([writer.root])
+        found = [f.format() for f in Validator(loaded, loaded.packs[-1]).validate_pack()]
+        check("a tag nothing defines is called out",
+              any("biome tag" in f for f in found), str(found))
+
+
 def main():
 
 
@@ -1378,6 +1428,7 @@ def main():
     test_scaffold_with_build()
     test_build_on_site()
     test_cli_smoke()
+    test_biome_tags_resolve()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

@@ -257,9 +257,8 @@ def set_reports(registries, world, source, set_id: str, seed: int,
         if template is not None:
             grid = Grid.load(template)
             size = (grid.sx, grid.sz)
-        biomes = structure.get("biomes")
         reports += survey(world, source, group, seed=seed,
-                          biomes=None if isinstance(biomes, str) else biomes,
+                          biomes=registries.biome_set(structure.get("biomes")),
                           sink=int((structure.get("start_height") or {}).get("absolute", 0)),
                           size=size, step=step, build=ident, ground=ground)
     return sorted(reports, key=lambda r: (r.site.chunk_x, r.site.chunk_z))
@@ -298,8 +297,7 @@ def build_on_site(registries, world, source, structure_id: str, seed: int,
     template = Grid.load(registries.templates[structure.get("start_pool", structure_id)])
     # the ground was skipped while picking, so measure it for the one site chosen
     report = survey(world, source, [chosen.site], seed=seed, build=structure_id,
-                    biomes=None if isinstance(structure.get("biomes"), str)
-                    else structure.get("biomes"),
+                    biomes=registries.biome_set(structure.get("biomes")),
                     sink=int((structure.get("start_height") or {}).get("absolute", 0)),
                     size=(template.sx, template.sz))[0]
     x0, z0 = report.box[0] - margin, report.box[1] - margin

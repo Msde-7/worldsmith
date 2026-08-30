@@ -104,6 +104,34 @@ def vendor_features(out: Path, dest: Path) -> None:
         print(f"  {category.split('/')[-1]}: {count} files, {total / 1024:.0f} KB")
 
 
+def vendor_biome_tags(version: str, dest: Path) -> None:
+    """The biome tags, straight out of the jar.
+
+    A structure names the biomes it may stand in, and vanilla structures do it
+    with a tag. Without these, "#minecraft:is_forest" cannot be turned into a
+    list of biomes and worldsmith has to report every site as acceptable.
+    """
+    import zipfile
+
+    jar = ROOT / ".runtime" / "build" / "versions" / version / f"server-{version}.jar"
+    if not jar.is_file():
+        jar = ROOT / ".runtime" / f"server-{version}.jar"
+    if not jar.is_file():
+        raise SystemExit(f"no server jar for {version} under .runtime/")
+    prefix = "data/minecraft/tags/worldgen/biome/"
+    total = count = 0
+    with zipfile.ZipFile(jar) as archive:
+        names = [n for n in archive.namelist()
+                 if n.startswith(prefix) and n.endswith(".json")]
+        if not names:
+            raise SystemExit(f"{jar.name} has nothing under {prefix}")
+        for name in sorted(names):
+            obj = json.loads(archive.read(name))
+            total += write(dest / "tags" / "worldgen" / "biome" / name[len(prefix):], obj)
+            count += 1
+    print(f"  biome tags: {count} files, {total / 1024:.0f} KB")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", default="26.2")
@@ -113,6 +141,7 @@ def main() -> int:
     if not dest.is_dir():
         raise SystemExit(f"no vendored vanilla data at {dest}")
 
+    vendor_biome_tags(args.version, dest)
     out = generate(args.version)
     vendor_presets(out, dest)
     vendor_features(out, dest)

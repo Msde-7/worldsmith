@@ -115,6 +115,37 @@ class Registries:
             ident = "minecraft:" + ident
         return self.data[category].get(ident)
 
+    def biome_set(self, biomes, seen: set[str] | None = None) -> set[str] | None:
+        """Expand a biome list the way a structure's `biomes` field is written:
+        ids, or a tag, or a list mixing both. None means a tag is not here to
+        expand, in which case nothing downstream should pretend to know."""
+        if biomes is None:
+            return None
+        if isinstance(biomes, str):
+            biomes = [biomes]
+        seen = set() if seen is None else seen
+        out: set[str] = set()
+        for entry in biomes:
+            if isinstance(entry, dict):
+                entry = entry.get("id")
+            if not isinstance(entry, str):
+                continue
+            if not entry.startswith("#"):
+                out.add(entry if ":" in entry else "minecraft:" + entry)
+                continue
+            ident = entry[1:]
+            if ident in seen:                      # tags may name each other
+                continue
+            seen.add(ident)
+            tag = self.get("biome_tag", ident)
+            if tag is None:
+                return None
+            inner = self.biome_set(tag.get("values") or [], seen)
+            if inner is None:
+                return None
+            out |= inner
+        return out
+
     def ids(self, category: str) -> list[str]:
         return sorted(self.data[category])
 

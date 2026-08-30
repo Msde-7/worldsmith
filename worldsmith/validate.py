@@ -675,19 +675,22 @@ class Validator:
         self.check_structure_biomes(where, obj.get("biomes"))
 
     def check_structure_biomes(self, where, biomes):
-        if isinstance(biomes, str):
-            if biomes.startswith("#"):
-                return                               # a tag, resolved by the game
-            biomes = [biomes]
-        if not isinstance(biomes, list) or not biomes:
+        if not biomes or (isinstance(biomes, list) and not biomes):
             self.add(ERROR, where, "biomes is empty",
                      "a structure with no biomes never generates anywhere")
             return
-        missing = [b for b in biomes if isinstance(b, str) and not self.has("biome", b)]
+        expanded = self.registries.biome_set(biomes)
+        if expanded is None:
+            tags = [b for b in ([biomes] if isinstance(biomes, str) else biomes)
+                    if isinstance(b, str) and b.startswith("#")]
+            self.add(WARNING, where, f"biome tag {', '.join(tags)} is not in this pack "
+                     "or the vendored vanilla data", "the biomes it lists cannot be checked")
+            return
+        missing = [b for b in sorted(expanded) if not self.has("biome", b)]
         if missing:
             self.add(ERROR, where, f"biomes names {', '.join(missing)}, which do not exist")
         placed = self.placed_biomes()
-        if placed is not None and not (set(biomes) & placed):
+        if placed is not None and not (expanded & placed):
             self.add(WARNING, where,
                      "none of these biomes are placed by this pack's dimension",
                      "the build will never generate here; either name a biome the "

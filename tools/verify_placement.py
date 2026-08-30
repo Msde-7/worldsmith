@@ -48,7 +48,7 @@ BIOMES = ["minecraft:plains", "minecraft:forest", "minecraft:birch_forest",
 
 
 def build_probe(root: Path, size: int, spacing: int, separation: int,
-                spread_type: str = "linear") -> int:
+                spread_type: str = "linear", biomes=BIOMES) -> int:
     """A build of `size` blocks square, one block tall, sunk to sit on the ground."""
     if root.exists():
         shutil.rmtree(root)
@@ -57,7 +57,7 @@ def build_probe(root: Path, size: int, spacing: int, separation: int,
     grid = Grid(size, 1, size)
     grid.fill(0, 0, 0, size - 1, 0, size - 1, "minecraft:gold_block")
     sink = -1
-    structures.add(writer, BUILD, grid, BIOMES, sink=sink)
+    structures.add(writer, BUILD, grid, biomes, sink=sink)
     placement = structures.spread(BUILD, spacing=spacing, separation=separation, salt=770193)
     placement["placement"]["spread_type"] = spread_type
     writer.add("structure_set", SET, placement)
@@ -82,7 +82,7 @@ def check_blocks(world: Path, reports, size: int, sink: int) -> None:
           f"{at_floor}/{size * size} blocks on the floor, {gold} in the box")
 
 
-def compare(pack: Path, world: Path, seed: int, sink: int, size: int) -> int:
+def compare(pack: Path, world: Path, seed: int, sink: int, size: int, biomes) -> int:
     registries = Registries.load([str(pack)])
     model = World.create(registries, "minecraft:overworld", seed)
     source = BiomeSource.from_json(
@@ -101,7 +101,8 @@ def compare(pack: Path, world: Path, seed: int, sink: int, size: int) -> int:
     box = (min(xs) * 16, min(zs) * 16, max(xs) * 16 + 15, max(zs) * 16 + 15)
     found = [s for s in set_sites(registries, SET, seed, *box)
              if (s.chunk_x, s.chunk_z) in evaluated]
-    reports = survey(model, source, found, seed=seed, biomes=BIOMES, sink=sink,
+    reports = survey(model, source, found, seed=seed,
+                     biomes=registries.biome_set(biomes), sink=sink,
                      size=(size, size), step=8)
     check_blocks(world, reports, size, sink)
 
@@ -138,13 +139,15 @@ def main() -> int:
     parser.add_argument("--radius", type=int, default=384)
     parser.add_argument("--pregen", type=int, default=120)
     parser.add_argument("--spread-type", default="linear", choices=("linear", "triangular"))
+    parser.add_argument("--biome-tag", help="name the biomes with a tag instead of a list")
     parser.add_argument("--reuse", action="store_true", help="skip building the world")
     args = parser.parse_args()
 
     pack = ROOT / "packs" / "_placement_probe"
     work = play_mod.RUNTIME / "verify" / "placement"
+    biomes = args.biome_tag or BIOMES
     sink = build_probe(pack, args.size, args.spacing, args.separation,
-                       args.spread_type)
+                       args.spread_type, biomes)
     if not args.reuse:
         print(f"probing with a {args.size}x{args.size} build, {args.spread_type} spread "
               f"{args.spacing}/{args.separation}, seed {args.seed}")
@@ -154,7 +157,7 @@ def main() -> int:
         spawn = play_mod.Viewpoint(0, 0, 80, None, "probe")
         play_mod.generate_world(runtime, work, pack, args.seed, spawn,
                                 args.radius, "creative", args.pregen)
-    return compare(pack, work / "world", args.seed, sink, args.size)
+    return compare(pack, work / "world", args.seed, sink, args.size, biomes)
 
 
 if __name__ == "__main__":
