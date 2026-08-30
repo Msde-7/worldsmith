@@ -322,7 +322,8 @@ def build_on_site(registries, world, source, structure_id: str, seed: int,
             if low <= top <= high:
                 grid.set(ix, top - low, iz, surface)
             if top < sea:
-                grid.fill(ix, max(top + 1, low) - low, iz, sea - low, iz, "minecraft:water[level=0]")
+                grid.fill(ix, max(top + 1, low) - low, iz, ix, sea - low, iz,
+                          "minecraft:water[level=0]")
 
     for (tx, ty, tz), spec in template.items():
         wx, wz = rotate_xz(tx, tz, template.sx, template.sz, report.rotation)

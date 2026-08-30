@@ -1291,6 +1291,58 @@ def test_build_on_site():
     check("the drawing is not empty", solid > template.filled(), str(solid))
 
 
+def test_cli_smoke():
+    """Every build command, run the way a person runs it.
+
+    The library is tested above; this is the wiring. Both bugs found by hand
+    while writing these commands were wiring: an argument that was never added
+    to a parser, and a string that was broken in a branch nothing had run."""
+    import contextlib
+    import io
+
+    from worldsmith.cli import main
+    from worldsmith.pack import scaffold
+
+    def run(argv):
+        """Quietly: these commands are chatty and the suite prints its own summary."""
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                return main(argv)
+        except SystemExit as exc:
+            return exc.code
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "p"
+        scaffold(root, "demo", "demo", with_build=True)
+        out = Path(tmp) / "out.png"
+        runs = [
+            ["check", str(root), "--no-smoke"],
+            ["build", str(root)],
+            ["build", str(root), "--id", "demo:hut", "--out", str(out), "--plan", "4,6"],
+            ["build", str(root), "--id", "demo:hut", "--out", str(out), "--site", "0",
+             "--margin", "4", "--seed", "77"],
+            ["sites", str(root), "--area", "512", "--limit", "3"],
+            ["sites", str(root), "--set", "demo:huts", "--area", "256"],
+            ["render", str(root), "--builds", "--size", "128", "--step", "8",
+             "--views", "map", "--out", str(Path(tmp) / "map.png")],
+            ["reference", "builds"],
+        ]
+        for argv in runs:
+            code = run(argv)
+            check(f"worldsmith {argv[0]} {' '.join(argv[2:4])} runs", code == 0, str(code))
+        check("build --id wrote a drawing", out.is_file())
+        check("build --plan wrote the slices too",
+              out.with_name(out.stem + "_plan.png").is_file())
+
+        for argv, why in ((["build", str(root), "--id", "demo:nope"], "an unknown build"),
+                          (["sites", str(root), "--set", "demo:nope"], "an unknown set"),
+                          (["build", str(root), "--id", "demo:hut", "--plan", "999",
+                            "--out", str(out)], "a plan level past the top")):
+            code = run(argv)
+            check(f"{why} is refused with a message", isinstance(code, str) or code != 0,
+                  str(code))
+
+
 def main():
 
 
@@ -1325,6 +1377,7 @@ def main():
     test_packed_longs()
     test_scaffold_with_build()
     test_build_on_site()
+    test_cli_smoke()
     print(f"{checks - len(failures)}/{checks} checks passed")
     for f in failures:
         print("  FAIL", f)

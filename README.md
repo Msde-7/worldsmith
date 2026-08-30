@@ -165,6 +165,13 @@ worldsmith render packs/keep --builds   # those sites, on the terrain
 worldsmith play   packs/keep --spawn-at keep:tower
 ```
 
+![a castle drawn on the ground it will stand on](renders/build_on_site.png)
+
+That picture took a second and no Minecraft. It is a build pasted into the
+terrain at the site the game will choose, at the height the game will put it,
+and the label is the site: floor height, biome, and twenty blocks of relief
+across the footprint, which is why the ground climbs away on the right.
+
 `sites` is the useful one. Where the game will put a build is not a mystery to
 be discovered by generating a world and flying around: it is a spread of one
 chunk per region, a rotation, and a biome check, all of which are reproducible.
