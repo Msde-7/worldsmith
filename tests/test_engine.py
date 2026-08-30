@@ -763,7 +763,7 @@ def test_template_round_trip():
     """A structure template the game will not read is a silent failure: the
     build simply is not there. So the writer is checked against its own reader,
     and against the DataVersion the vendored jar declares."""
-    from worldsmith.voxel import Grid, data_version, parse_block, read_nbt
+    from worldsmith.voxel import Grid, data_version, parse_block, read_nbt, write_nbt
 
     grid = Grid(3, 2, 3)
     grid.fill(0, 0, 0, 2, 0, 2, "minecraft:stone_bricks")
@@ -789,12 +789,27 @@ def test_template_round_trip():
           == "minecraft:chests/simple_dungeon", str(back.block_entities))
 
     for spec in ("minecraft:chain", "minecraft:oak_stairs[facing=up]",
-                 "minecraft:oak_stairs[nonsense=1]"):
+                 "minecraft:oak_stairs[nonsense=1]", "Stone", "minecraft:stone[",
+                 ""):
         try:
             parse_block(spec)
-            check(f"bad state {spec} is refused", False, "accepted")
+            check(f"bad state {spec!r} is refused", False, "accepted")
         except ValueError:
-            check(f"bad state {spec} is refused", True)
+            check(f"bad state {spec!r} is refused", True)
+
+    edge = Grid(2, 2, 2)
+    edge.set(-1, 0, 0, "minecraft:stone")
+    edge.set(0, 0, 9, "minecraft:stone")
+    check("a block outside the box is dropped, not an error", edge.filled() == 0,
+          str(edge.filled()))
+    check("reading outside the box is nothing, not an error",
+          edge.get(-1, 0, 0) is None and edge.name_at(9, 9, 9) == "")
+
+    try:
+        write_nbt({"nope": object()}, Path("unwritten.nbt"))
+        check("NBT refuses a type it cannot write", False, "accepted")
+    except TypeError:
+        check("NBT refuses a type it cannot write", True)
 
 
 def test_structure_files():
@@ -878,6 +893,11 @@ def test_placement_geometry():
           str(footprint(site, 64, 64, "CLOCKWISE_90")))
     check("a half turn grows back and left",
           footprint(site, 64, 64, "CLOCKWISE_180") == (-31, -15, 32, 48))
+    try:
+        footprint(site, 4, 4, "SIDEWAYS")
+        check("an unknown turn is refused with a message", False, "accepted")
+    except ValueError:
+        check("an unknown turn is refused with a message", True)
     check("a one block build is its anchor whatever the turn",
           all(footprint(site, 1, 1, r) == (32, 48, 32, 48)
               for r in ("NONE", "CLOCKWISE_90", "CLOCKWISE_180", "COUNTERCLOCKWISE_90")))
@@ -1447,11 +1467,14 @@ def test_shapes():
     check("a cylinder is solid at its edge", round_grid.name_at(10, 1, 3) == "stone")
     check("a cylinder is hollow inside", round_grid.name_at(10, 1, 10) == "air")
     check("a cylinder stops at its radius", round_grid.name_at(10, 1, 0) == "")
-    edge = ring_cells(10.5, 10.5, 8.0, size=(21, 21))
+    edge = ring_cells(10.5, 10.5, 8.0)
     check("a ring is a closed run of cells", len(edge) > 30, str(len(edge)))
     check("a ring runs around, not across",
           all(abs(a[0] - b[0]) <= 3 and abs(a[1] - b[1]) <= 3
               for a, b in zip(edge, edge[1:])), "the ring jumps")
+    check("a ring away from the origin is the same ring, moved",
+          [(x - 1000, z + 500) for x, z in ring_cells(1010.5, -489.5, 8.0)] == edge,
+          "a ring is not translation invariant")
 
     walk = perimeter(0, 0, 8, 8)
     check("a perimeter visits every edge cell once",

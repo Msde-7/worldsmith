@@ -73,12 +73,13 @@ def perimeter(x0: int, z0: int, x1: int, z1: int) -> list[tuple[int, int]]:
     return cells
 
 
-def ring_cells(cx: float, cz: float, radius: float, thickness: float = 1.2,
-               size: tuple[int, int] = (256, 256)) -> list[tuple[int, int]]:
-    """The cells of a circle's edge, in order around it."""
+def ring_cells(cx: float, cz: float, radius: float,
+               thickness: float = 1.2) -> list[tuple[int, int]]:
+    """The cells of a circle's edge, in order around it. Cells outside whatever
+    grid they are used on are dropped there, so this needs no size."""
     found = []
-    for x in range(size[0]):
-        for z in range(size[1]):
+    for x in range(int(cx - radius) - 1, int(cx + radius) + 2):
+        for z in range(int(cz - radius) - 1, int(cz + radius) + 2):
             distance = math.hypot(x + 0.5 - cx, z + 0.5 - cz)
             if radius - thickness <= distance <= radius:
                 found.append((math.atan2(z + 0.5 - cz, x + 0.5 - cx), x, z))

@@ -93,7 +93,9 @@ def footprint(site: Site, size_x: int, size_z: int, rotation: str) -> tuple[int,
     corners = {"NONE": (0, 0, dx, dz),
                "CLOCKWISE_90": (-dz, 0, 0, dx),
                "CLOCKWISE_180": (-dx, -dz, 0, 0),
-               "COUNTERCLOCKWISE_90": (0, -dx, dz, 0)}[rotation]
+               "COUNTERCLOCKWISE_90": (0, -dx, dz, 0)}.get(rotation)
+    if corners is None:
+        raise ValueError(f"unknown rotation {rotation!r}, want one of {ROTATIONS}")
     return (site.x + corners[0], site.z + corners[1],
             site.x + corners[2], site.z + corners[3])
 

@@ -205,6 +205,13 @@ have.
 
 ![a castle as the game built it](renders/final_great_castle.png)
 
+Builds also reach a world you already play, which terrain cannot: terrain is
+baked into `level.dat` when a world is made, while structure sets are read every
+time a chunk generates. Drop the zip in `<world>/datapacks/` and the builds are
+in everything generated from then on. Measured on a world made without the pack:
+nothing at spawn, twelve builds in a patch generated two thousand blocks away
+after the pack went in.
+
 **castle_country** is the pack that uses both halves: downs and oak woods over
 flat topped crags, with castles, ruins and tower keeps standing in it. Its crag
 noise feeds the router's weirdness, so the biome boxes follow the crags, and

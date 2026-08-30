@@ -162,6 +162,12 @@ What will bite, in order of how much time it costs:
   which is the number that says whether it will look wrong. Never place
   anything relative to the terrain right beside a build.
 
+A build pack can be added to a world someone already plays, which terrain
+cannot: drop it in `<world>/datapacks/` and the builds appear in chunks
+generated from then on, not in the ones already explored. Checked on a world
+made without the pack: 0 builds at spawn, then 12 in a patch generated 2000
+blocks away after the pack went in.
+
 After a world exists, check what the game actually did:
 
 ```

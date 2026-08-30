@@ -373,6 +373,17 @@ crenellate, gable_roof and stair_flight.
 
       which also says whether the model called that site right.
 
+  ==> A WORLD THAT ALREADY EXISTS
+      Terrain cannot be added to a world after it is made: the generator is
+      baked into level.dat at creation. Builds can. Structure sets are read from
+      the registry every time a chunk generates, so dropping a pack into
+      <world>/datapacks/ puts the builds in everything generated from then on.
+
+      Checked: a plain world with no pack generated 0 builds around its spawn;
+      the pack was added; a patch 2000 blocks away generated 12; the chunks
+      around spawn still had none. So it works, and it only works where you have
+      not been yet.
+
   ==> THE LOOP
       worldsmith new    <pack> --with-build             start from one that works
       worldsmith build  <pack> --id <id> --plan 10,17   look at it
