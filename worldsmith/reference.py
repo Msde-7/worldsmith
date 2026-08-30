@@ -354,11 +354,20 @@ crenellate, gable_roof and stair_flight.
         takes a while: a 64x52x64 build is a hundred thousand blocks per copy
 
   ==> THE GROUND AROUND IT IS NOT THE GROUND YOU RENDERED
-      terrain_adaptation reshapes the terrain against the build, by ten blocks
-      or more, and worldsmith's terrain does not model that. So `sites` relief
-      is the ground before the build lands, which is the right number for "will
-      this look wrong", and anything that needs the ground after it lands has to
-      read the finished world:
+      terrain_adaptation reshapes the terrain against the build and worldsmith
+      does not model it. Measured against a generated world, column by column,
+      around a 64 wide build with beard_box:
+
+        0-3 blocks out    nothing matches, median 10 blocks different
+        4-7 blocks out    3% matches, median 3 blocks different
+        8-11 blocks out   84% matches
+        12 blocks and on  back to the usual agreement, which is 88-100%
+                          depending on how much carving and how many features
+                          the biome has
+
+      So `sites` relief is the ground before the build lands, which is the right
+      number for "will this look wrong", and anything that needs the ground
+      after it lands has to read the finished world:
 
         worldsmith inspect <world> --pack <pack> --structure <id>
 

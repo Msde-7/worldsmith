@@ -155,9 +155,11 @@ What will bite, in order of how much time it costs:
   places every block. A 64x52x64 build is a hundred thousand blocks per copy,
   which is what makes a world slow to generate, not the count of builds.
 * **The ground around a build is not the ground you rendered.** The game
-  reshapes terrain against a structure by ten blocks or more, and worldsmith's
-  terrain does not model that. `sites` relief is the ground before the build
-  lands, which is the number that says whether it will look wrong. Never place
+  reshapes terrain against a structure and worldsmith does not model it.
+  Measured around a 64 wide build: nothing matches within 3 blocks of it
+  (median 10 blocks different), 84% matches by 8 blocks out, and by 12 blocks
+  it is back to normal. `sites` relief is the ground before the build lands,
+  which is the number that says whether it will look wrong. Never place
   anything relative to the terrain right beside a build.
 
 After a world exists, check what the game actually did:
