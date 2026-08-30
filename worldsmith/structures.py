@@ -17,7 +17,7 @@ from __future__ import annotations
 
 def structure(pool: str, biomes, *, sink: int = 0, step: str = "surface_structures",
               adaptation: str = "beard_box", heightmap: str | None = "WORLD_SURFACE_WG",
-              size: int = 1, max_distance: int = 116, spawns: dict | None = None) -> dict:
+              size: int = 1, max_distance: int = 116) -> dict:
     """`sink` is how far below the surface the template's y=0 lands, so a build
     whose ground floor sits at y=N wants sink=-(N+1)."""
     out = {
@@ -25,7 +25,7 @@ def structure(pool: str, biomes, *, sink: int = 0, step: str = "surface_structur
         "biomes": biomes if isinstance(biomes, str) else list(biomes),
         "step": step,
         "terrain_adaptation": adaptation,
-        "spawn_overrides": spawns or {},
+        "spawn_overrides": {},
         "start_pool": pool,
         "size": size,
         "start_height": {"absolute": sink},
@@ -37,8 +37,13 @@ def structure(pool: str, biomes, *, sink: int = 0, step: str = "surface_structur
     return out
 
 
-def pool(template: str, *, projection: str = "rigid",
-         processors: str = "minecraft:empty") -> dict:
+def pool(template: str) -> dict:
+    """A pool of one build.
+
+    The projection is rigid, which is the only one the rest of worldsmith
+    follows: a terrain_matching build steps with the ground, so its floor is not
+    one height and `sites` could not tell you what it is.
+    """
     return {
         "fallback": "minecraft:empty",
         "elements": [{
@@ -46,8 +51,8 @@ def pool(template: str, *, projection: str = "rigid",
             "element": {
                 "element_type": "minecraft:legacy_single_pool_element",
                 "location": template,
-                "processors": processors,
-                "projection": projection,
+                "processors": "minecraft:empty",
+                "projection": "rigid",
             },
         }],
     }

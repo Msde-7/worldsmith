@@ -117,6 +117,16 @@ def biome_at(chunk: dict, x: int, y: int, z: int) -> str | None:
     return None
 
 
+def biome_in_world(world: Path, x: int, y: int, z: int) -> str | None:
+    """The biome the game stored at this block, read from the one region file
+    that holds it rather than by walking the world."""
+    path = region_dir(world) / f"r.{x >> 9}.{z >> 9}.mca"
+    if not path.is_file():
+        return None
+    chunk = read_region(path).get((x >> 4, z >> 4))
+    return biome_at(chunk, x, y, z) if chunk else None
+
+
 def structure_starts(world: Path) -> dict[str, list[dict]]:
     """Every structure the game recorded, by id.
 

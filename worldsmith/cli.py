@@ -16,12 +16,12 @@ from pathlib import Path
 import numpy as np
 
 from . import play as play_mod
-from .anvil import read_box, region_dir, structure_starts
+from .anvil import biome_in_world, read_box, region_dir, structure_starts
 from .climate import PARAM_NAMES, BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
 from .draw import mark_builds, render_iso, render_plan
 from .pack import export_zip, scaffold
-from .placement import Site, build_on_site, set_reports
+from .placement import Site, box_centre, build_on_site, set_reports
 from .reference import reference_text
 from .registry import Registries
 from .render import contact_sheet, render_biomes, render_height, render_map, render_section
@@ -556,6 +556,10 @@ def cmd_inspect(args):
             print(f"  the model said: {predicted.build.split(':')[-1]} at x {predicted.box[0]} "
                   f"z {predicted.box[1]}, floor y {predicted.floor_y}, "
                   f"{predicted.rotation.lower()}  ->  {'agrees' if agree else 'DISAGREES'}")
+            middle = box_centre(predicted.box)
+            stored = biome_in_world(world, middle[0], predicted.floor_y, middle[1])
+            print(f"  biome: {predicted.biome} by the model, "
+                  f"{stored or 'not stored yet'} where the world wrote it")
 
     template = Grid.load(path)
     placed = read_box(world, box[0], box[2], box[3], box[5], box[1], box[4])

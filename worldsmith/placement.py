@@ -98,12 +98,10 @@ def footprint(site: Site, size_x: int, size_z: int, rotation: str) -> tuple[int,
             site.x + corners[2], site.z + corners[3])
 
 
-def anchor_of(site: Site, seed: int, size_x: int = 1, size_z: int = 1) -> tuple[int, int]:
-    """Where the game reads the ground and the biome: the middle of the box the
+def box_centre(box: tuple[int, int, int, int]) -> tuple[int, int]:
+    """Where the game reads the ground and the biome: the middle of the box a
     build will occupy, not the chunk it was picked in."""
-    rotation = site_rotation(seed, site.chunk_x, site.chunk_z)
-    x0, z0, x1, z1 = footprint(site, size_x, size_z, rotation)
-    return int((x0 + x1) / 2), int((z0 + z1) / 2)      # Java truncates toward zero
+    return int((box[0] + box[2]) / 2), int((box[1] + box[3]) / 2)   # Java truncates
 
 
 @dataclass
@@ -201,7 +199,7 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
         rotation = site_rotation(seed, site.chunk_x, site.chunk_z)
         box = footprint(site, size[0], size[1], rotation)
         boxes.append((rotation, box))
-        anchors.append((int((box[0] + box[2]) / 2), int((box[1] + box[3]) / 2)))
+        anchors.append(box_centre(box))
 
     xs = np.array([a[0] for a in anchors], dtype=np.int64)
     zs = np.array([a[1] for a in anchors], dtype=np.int64)

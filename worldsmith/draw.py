@@ -32,16 +32,11 @@ def _palette(grid: Grid) -> tuple[dict[int, tuple[int, int, int]], set[int]]:
     return colors, air
 
 
-def _oriented(grid: Grid, turn: int, flip: bool) -> np.ndarray:
-    cells = np.rot90(grid.cells, k=turn, axes=(0, 2)) if turn else grid.cells
-    return np.ascontiguousarray(cells[::-1, :, :] if flip else cells)
-
-
-def render_iso(grid: Grid, path, scale: int = 4, turn: int = 0, flip: bool = False,
-               label: str = "") -> Path:
+def render_iso(grid: Grid, path, scale: int = 4, turn: int = 0, label: str = "") -> Path:
     """An isometric drawing, painted back to front. `turn` is quarter turns."""
     colors, air = _palette(grid)
-    cells = _oriented(grid, turn, flip)
+    cells = np.ascontiguousarray(
+        np.rot90(grid.cells, k=turn, axes=(0, 2)) if turn else grid.cells)
     solid = cells != 0
     for index in air:
         solid &= cells != index
