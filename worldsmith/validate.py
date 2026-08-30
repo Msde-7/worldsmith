@@ -764,6 +764,20 @@ class Validator:
         if zone and not self.has("structure_set", zone.get("other_set", "")):
             self.add(ERROR, where,
                      f"exclusion_zone names {zone.get('other_set')}, which does not exist")
+        # the spread is a function of seed, spacing and salt, so two sets sharing
+        # all three pick the same chunk every time and build on top of each other
+        signature = (spacing, separation, placement.get("salt"))
+        for other_id, other in sorted(self.registries.data["structure_set"].items()):
+            if other_id >= ident:            # only the earlier one of each pair
+                continue
+            other_placement = (other or {}).get("placement") or {}
+            if (other_placement.get("type") == "minecraft:random_spread"
+                    and (other_placement.get("spacing"), other_placement.get("separation"),
+                         other_placement.get("salt")) == signature):
+                self.add(WARNING, where,
+                         f"the same spacing, separation and salt as {other_id}",
+                         "they will pick the same chunks, so their builds land on "
+                         "each other; change one salt")
 
     def check_biome_tag(self, ident, obj):
         """A biome tag is how a structure finds its biomes.

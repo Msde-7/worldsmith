@@ -990,6 +990,24 @@ def test_structure_validation():
           any("exclusion_zone" in f for f in findings(bad_exclusion)),
           str(findings(bad_exclusion)))
 
+    def twin_sets(writer):
+        good(writer)
+        writer.add("structure_set", "test:huts",
+                   spread("test:hut", spacing=8, separation=3, salt=1))
+        writer.add("structure_set", "test:also_huts",
+                   spread("test:hut", spacing=8, separation=3, salt=1))
+    found = findings(twin_sets)
+    check("two sets that pick the same chunks are caught",
+          sum("same spacing, separation and salt" in f for f in found) == 1, str(found))
+
+    def different_salt(writer):
+        good(writer)
+        writer.add("structure_set", "test:also_huts",
+                   spread("test:hut", spacing=8, separation=3, salt=2))
+    check("a different salt is not a collision",
+          not any("same spacing" in f for f in findings(different_salt)),
+          str(findings(different_salt)))
+
     def no_biomes(writer):
         good(writer)
         writer.add("structure", "test:hut", structure("test:hut", []))
