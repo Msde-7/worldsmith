@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="python 3.10 plus">
   <img src="https://img.shields.io/badge/minecraft-26.2-62B47A" alt="minecraft 26.2">
-  <img src="https://img.shields.io/badge/tests-427%20passing-4C9A2A" alt="427 tests passing">
+  <img src="https://img.shields.io/badge/tests-455%20passing-4C9A2A" alt="455 tests passing">
   <img src="https://img.shields.io/badge/license-MIT-999999" alt="MIT license">
 </p>
 

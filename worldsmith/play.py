@@ -245,7 +245,8 @@ def viewpoint_at_build(world, source, registries, structure_id: str, seed: int,
         raise SystemExit(f"unknown structure {structure_id}")
     owner = next((ident for ident in registries.ids("structure_set")
                   if any(e.get("structure") == structure_id
-                         for e in (registries.get("structure_set", ident) or {}).get("structures") or [])),
+                         for e in (registries.get("structure_set", ident)
+                                   or {}).get("structures") or [])),
                  None)
     if owner is None:
         raise SystemExit(f"no structure set places {structure_id}")

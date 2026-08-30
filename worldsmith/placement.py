@@ -101,7 +101,8 @@ def footprint(site: Site, size_x: int, size_z: int, rotation: str) -> tuple[int,
 def anchor_of(site: Site, seed: int, size_x: int = 1, size_z: int = 1) -> tuple[int, int]:
     """Where the game reads the ground and the biome: the middle of the box the
     build will occupy, not the chunk it was picked in."""
-    x0, z0, x1, z1 = footprint(site, size_x, size_z, site_rotation(seed, site.chunk_x, site.chunk_z))
+    rotation = site_rotation(seed, site.chunk_x, site.chunk_z)
+    x0, z0, x1, z1 = footprint(site, size_x, size_z, rotation)
     return int((x0 + x1) / 2), int((z0 + z1) / 2)      # Java truncates toward zero
 
 
@@ -147,7 +148,7 @@ def sites(placement: dict, seed: int, x0: int, z0: int, x1: int, z1: int) -> lis
     if kind != "minecraft:random_spread":
         raise NotImplementedError(f"{kind} placement is not modelled")
     if float(placement.get("frequency", 1.0)) < 1.0:
-        raise NotImplementedError("only frequency below 1 is not modelled")
+        raise NotImplementedError("a frequency below 1 is not modelled")
     spacing = int(placement["spacing"])
     chunks = [c // 16 for c in (x0, z0, x1, z1)]
     regions_x = range(chunks[0] // spacing, chunks[2] // spacing + 1)
@@ -186,8 +187,10 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
     will occupy, at the WORLD_SURFACE_WG height there plus the structure's
     start_height. `floor_y` is where the build's own y=0 lands, which is that
     height less one for the ground level delta a template without jigsaw blocks
-    carries; measured against 46 placed builds it is exact. `biomes` is the structure's biome list; sites outside it are
-    reported rather than dropped, because "my structure never generates" is
+    carries; measured against 46 placed builds it is exact.
+
+    `biomes` is the structure's biome list, already expanded. Sites outside it
+    are reported rather than dropped, because "my structure never generates" is
     usually this.
     """
     if not found:
@@ -281,7 +284,8 @@ def build_on_site(registries, world, source, structure_id: str, seed: int,
         raise SystemExit(f"unknown structure {structure_id}")
     owner = next((ident for ident in registries.ids("structure_set")
                   if any(e.get("structure") == structure_id
-                         for e in (registries.get("structure_set", ident) or {}).get("structures") or [])),
+                         for e in (registries.get("structure_set", ident)
+                                   or {}).get("structures") or [])),
                  None)
     if owner is None:
         raise SystemExit(f"no structure set places {structure_id}")
