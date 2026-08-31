@@ -297,9 +297,10 @@ how tall and how steep, `biomes` whether anything landed where you meant,
 
 `check` runs a schema validator (every density function type and field, dangling
 references, spline ordering, block ids and their properties, biome boxes that can
-never win, and for builds: missing templates, pools that name nothing, a
-separation above its spacing, and biomes the dimension never places) and then a smoke test that actually generates terrain and reports
-whether anything was built at all. Fix every ERROR before rendering; the game
+never win, and for builds a missing template, a pool that names nothing, a
+separation above its spacing, and biomes the dimension never places) and then
+a smoke test that actually generates terrain and reports whether anything was
+built at all. Fix every ERROR before rendering; the game
 rejects malformed worldgen silently and hands you a void world.
 
 ## Verifying in the real game (optional)

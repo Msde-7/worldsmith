@@ -286,7 +286,7 @@ CHECKING IT
   (for 26.2) effects.water_color.
 """,
     "builds": """PUTTING A BUILD IN A WORLD
-=========================
+==========================
 A build is a box of blocks the game copies in: a template .nbt plus three JSON
 files. worldsmith.structures.add writes all four from a voxel.Grid, and
 worldsmith.shapes has the geometry a build is made of: speckle for masonry that
