@@ -11,17 +11,23 @@ import math
 from .voxel import Grid
 
 
-def speckle(x: int, y: int, z: int, mix: list[tuple[int, str]]) -> str:
+def cell_hash(x: int, y: int, z: int, salt: int = 0) -> int:
+    """A stable number for a position, so a pattern comes out the same every
+    build. Two patterns over the same blocks want different salts, or they
+    agree with each other and the eye reads the seam."""
+    h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791) ^ (salt * 2654435761)
+    h &= 0xFFFFFFFF
+    return h ^ (h >> 13)
+
+
+def speckle(x: int, y: int, z: int, mix: list[tuple[int, str]], salt: int = 0) -> str:
     """Pick a block for this position from weighted choices, the same way every
-    time. A wall of one block reads as extruded; a wall of four reads as built.
+    time. A wall of one block reads as extruded, a wall of four reads as built.
 
     `mix` is [(weight, block), ...].
     """
     total = sum(weight for weight, _ in mix)
-    h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791)
-    h &= 0xFFFFFFFF
-    h ^= h >> 13
-    pick = h % total
+    pick = cell_hash(x, y, z, salt) % total
     for weight, block in mix:
         pick -= weight
         if pick < 0:
@@ -66,6 +72,14 @@ def cylinder(grid: Grid, cx: float, cz: float, radius: float, y0: int, y1: int,
                 fill(grid, x, y0, z, x, y1, z, wall)
             elif inner is not None:
                 fill(grid, x, y0, z, x, y1, z, inner)
+
+
+def line(x0: int, z0: int, x1: int, z1: int) -> list[tuple[int, int]]:
+    """The cells of a straight run, in order, so a pattern can walk along it."""
+    dx = (x1 > x0) - (x1 < x0)
+    dz = (z1 > z0) - (z1 < z0)
+    steps = max(abs(x1 - x0), abs(z1 - z0))
+    return [(x0 + i * dx, z0 + i * dz) for i in range(steps + 1)]
 
 
 def perimeter(x0: int, z0: int, x1: int, z1: int) -> list[tuple[int, int]]:

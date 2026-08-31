@@ -7,6 +7,7 @@ makes the game place it the same way it places a village.
 """
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -17,6 +18,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from worldsmith import structures                             # noqa: E402
 from worldsmith.draw import render_iso, render_plan           # noqa: E402
 from worldsmith.pack import PackWriter                        # noqa: E402
+from worldsmith.shapes import cell_hash, crenellate, fill, line, speckle  # noqa: E402
 from worldsmith.voxel import Grid                             # noqa: E402
 
 NS = "castle"
@@ -40,44 +42,36 @@ TOWER_TOP = 30
 GATE_X0, GATE_X1 = 30, 33        # the passage through the south wall
 
 
+def dist_to_edge(x: int, z: int, lo: int, hi: int) -> int:
+    """How far in from the edge of a square this column sits."""
+    return min(x - lo, z - lo, hi - x, hi - z)
+
+
 def dist(x: int, z: int) -> int:
-    """How far in from the outer edge this column sits."""
-    return min(x, z, SIZE - 1 - x, SIZE - 1 - z)
+    return dist_to_edge(x, z, 0, SIZE - 1)
 
 
 def hashed(x: int, y: int, z: int, salt: int = 0) -> int:
-    h = (x * 73856093) ^ (y * 19349663) ^ (z * 83492791) ^ (salt * 2654435761)
-    h &= 0xFFFFFFFF
-    h ^= h >> 13
-    return h % 1000
+    return cell_hash(x, y, z, salt) % 1000
 
 
 def paving(x: int, z: int) -> str:
-    """An old courtyard, and no soil for a tree to take root in: features are
+    """An old courtyard, and no soil for a tree to take root in. Features are
     placed after structures, so a grass bailey grows an oak wood."""
-    h = hashed(x, 0, z, 13)
-    if h < 520:
-        return "minecraft:cobblestone"
-    if h < 700:
-        return "minecraft:mossy_cobblestone"
-    if h < 860:
-        return "minecraft:andesite"
-    return "minecraft:gravel"
+    return speckle(x, 0, z, [(520, "minecraft:cobblestone"),
+                             (180, "minecraft:mossy_cobblestone"),
+                             (160, "minecraft:andesite"),
+                             (140, "minecraft:gravel")], salt=13)
 
 
 def masonry(x: int, y: int, z: int, weathered: int = 0) -> str:
     """Stone brick with enough cobble and moss speckled through it that a wall
     reads as built rather than extruded."""
-    h = hashed(x, y, z, 7)
-    if h < 60 + weathered * 4:
-        return "minecraft:mossy_stone_bricks"
-    if h < 110 + weathered * 6:
-        return "minecraft:cracked_stone_bricks"
-    if h < 150:
-        return "minecraft:cobblestone"
-    if h < 165:
-        return "minecraft:chiseled_stone_bricks"
-    return "minecraft:stone_bricks"
+    return speckle(x, y, z, [(60 + weathered * 4, "minecraft:mossy_stone_bricks"),
+                             (50 + weathered * 2, "minecraft:cracked_stone_bricks"),
+                             (40 - weathered * 6, "minecraft:cobblestone"),
+                             (15, "minecraft:chiseled_stone_bricks"),
+                             (835, "minecraft:stone_bricks")], salt=7)
 
 
 class Castle:
@@ -87,27 +81,17 @@ class Castle:
 
     # --- helpers -------------------------------------------------------------
 
+    def masonry(self, x, y, z) -> str:
+        return masonry(x, y, z, self.weathered)
+
     def stone(self, x0, y0, z0, x1, y1, z1) -> None:
-        for x in range(min(x0, x1), max(x0, x1) + 1):
-            for y in range(min(y0, y1), max(y0, y1) + 1):
-                for z in range(min(z0, z1), max(z0, z1) + 1):
-                    self.g.set(x, y, z, masonry(x, y, z, self.weathered))
+        fill(self.g, x0, y0, z0, x1, y1, z1, self.masonry)
 
     def crenellate_line(self, x0, z0, x1, z1, y) -> None:
         """Merlons two wide, embrasures one wide, along a straight parapet."""
-        step = 0
-        x, z = x0, z0
-        dx = (x1 > x0) - (x1 < x0)
-        dz = (z1 > z0) - (z1 < z0)
-        while True:
-            if step % 3 != 2:
-                self.g.set(x, y, z, masonry(x, y, z, self.weathered))
-            if x == x1 and z == z1:
-                break
-            x, z, step = x + dx, z + dz, step + 1
+        crenellate(self.g, line(x0, z0, x1, z1), y, self.masonry)
 
     def crenellate_ring(self, cx, cz, radius, y, segments=14) -> None:
-        import math
         for x in range(self.g.sx):
             for z in range(self.g.sz):
                 d = math.hypot(x + 0.5 - cx, z + 0.5 - cz)
@@ -181,7 +165,6 @@ class Castle:
                 self.g.set(hi, y, t, "minecraft:air")
 
     def corner_towers(self) -> None:
-        import math
         g = self.g
         centre = WALL_OUT + 1.5
         for cx, cz in ((centre, centre), (SIZE - centre, centre),
@@ -231,7 +214,6 @@ class Castle:
             g.set(ix - 1, GROUND + 1, iz - 1, "minecraft:lantern[hanging=false]")
 
     def gatehouse(self) -> None:
-        import math
         g = self.g
         z_out, z_in = SIZE - 1 - WALL_OUT, SIZE - 1 - WALL_IN     # 53 and 50
         # two flanking towers, then the passage carved straight through them
@@ -470,7 +452,6 @@ class Castle:
         # stairs from the courtyard up to the wall walk, one each side
         for side in (0, 1):
             x = BAILEY if side == 0 else SIZE - 1 - BAILEY
-            facing = "west" if side == 0 else "east"
             for step in range(WALK - GROUND):
                 z = 26 + step
                 self.stair(x, GROUND + 1 + step, z, "south")
@@ -482,8 +463,7 @@ class Castle:
             g.set(WALL_IN, GROUND + 4, t, "minecraft:wall_torch[facing=west]")
             g.set(SIZE - 1 - WALL_IN, GROUND + 4, t, "minecraft:wall_torch[facing=east]")
 
-    def building(self, x0, z0, w, d, height, wall, roof, door_side="south",
-                 base=GROUND) -> None:
+    def building(self, x0, z0, w, d, height, wall, roof, base=GROUND) -> None:
         """A small gabled building: walls, a ridged roof of stairs, a door and
         two windows. The bailey needs somewhere for people to live."""
         g = self.g
@@ -514,22 +494,18 @@ class Castle:
                     g.set(x, y - 1, z, f"minecraft:{roof}_planks")
         # door and windows
         cx, cz = (x0 + x1) // 2, (z0 + z1) // 2
-        if door_side == "south":
-            dx, dz, facing = cx, z1, "south"
-        else:
-            dx, dz, facing = cx, z0, "north"
-        g.set(dx, base + 1, dz, f"minecraft:oak_door[facing={facing},half=lower,hinge=left]")
-        g.set(dx, base + 2, dz, f"minecraft:oak_door[facing={facing},half=upper,hinge=left]")
+        dx, dz = cx, z1
+        g.set(dx, base + 1, dz, "minecraft:oak_door[facing=south,half=lower,hinge=left]")
+        g.set(dx, base + 2, dz, "minecraft:oak_door[facing=south,half=upper,hinge=left]")
         for z in (cz - 2, cz + 2):
             g.set(x0, base + 2, z, "minecraft:glass_pane")
             g.set(x1, base + 2, z, "minecraft:glass_pane")
         g.set(cx, base + height, dz, "minecraft:lantern[hanging=true]")
-        return (x0 + 1, base + 1, z0 + 1)
 
     def chapel(self) -> None:
         g = self.g
         x0, z0, w, d = BAILEY + 1, 24, 7, 11
-        self.building(x0, z0, w, d, 5, "minecraft:stone_bricks", "spruce", door_side="south")
+        self.building(x0, z0, w, d, 5, "minecraft:stone_bricks", "spruce")
         cx = x0 + w // 2
         # altar, candles and a rose window at the far end
         g.set(cx, GROUND + 1, z0 + 1, "minecraft:smooth_stone_slab[type=top]")
@@ -546,8 +522,8 @@ class Castle:
     def barracks(self) -> None:
         g = self.g
         x0, z0, w, d = SIZE - BAILEY - 8, 24, 7, 11
-        self.building(x0, z0, w, d, 5, "minecraft:oak_planks", "spruce", door_side="south")
-        for i, z in enumerate(range(z0 + 2, z0 + 9, 3)):
+        self.building(x0, z0, w, d, 5, "minecraft:oak_planks", "spruce")
+        for z in range(z0 + 2, z0 + 9, 3):
             g.set(x0 + 1, GROUND + 1, z, "minecraft:red_bed[facing=east,part=head]")
             g.set(x0 + 2, GROUND + 1, z, "minecraft:red_bed[facing=east,part=foot]")
             g.set(x0 + w - 2, GROUND + 1, z, "minecraft:barrel[facing=up]")
@@ -564,10 +540,6 @@ class Castle:
         self.chapel()
         self.barracks()
         return self.g
-
-
-def dist_to_edge(x, z, lo, hi) -> int:
-    return min(x - lo, z - lo, hi - x, hi - z)
 
 
 def lattice(x: int, z: int, cell: int, salt: int) -> float:
@@ -604,7 +576,7 @@ class TowerKeep(Castle):
         self.weathered = weathered
 
     def near_edge(self, x, z) -> int:
-        return min(x, z, self.SIZE - 1 - x, self.SIZE - 1 - z)
+        return dist_to_edge(x, z, 0, self.SIZE - 1)
 
     def build(self) -> Grid:
         g, base = self.g, self.BASE
@@ -805,8 +777,9 @@ def ruinate(grid: Grid, keep_level: int = GROUND) -> Grid:
         for z in range(grid.sz):
             under = grid.name_at(x, keep_level, z)
             over = grid.name_at(x, keep_level + 1, z)
-            if under in ("cobblestone", "mossy_cobblestone", "andesite", "gravel",
-                         "dirt_path", "polished_andesite", "stone_bricks")                     and over in ("", "air") and lattice(x, z, 7, 71) > 0.42:
+            if (under in ("cobblestone", "mossy_cobblestone", "andesite", "gravel",
+                          "dirt_path", "polished_andesite", "stone_bricks")
+                    and over in ("", "air") and lattice(x, z, 7, 71) > 0.42):
                 grid.set(x, keep_level, z, "minecraft:grass_block[snowy=false]")
 
     # the courtyard goes back to grass and scrub
