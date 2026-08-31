@@ -23,6 +23,21 @@ from worldsmith.validate import ERROR, Validator, validate_path
 from worldsmith.world import World
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def memo(fn):
+    """The validator fixtures below are called twice per check, once for the
+    condition and once for the message it would print. Each call reloads the
+    vendored vanilla data, which is a third of a second."""
+    cache = {}
+
+    def wrapped(*args, **kwargs):
+        key = repr((args, kwargs))
+        if key not in cache:
+            cache[key] = fn(*args, **kwargs)
+        return cache[key]
+
+    return wrapped
 ROOT = os.path.dirname(HERE)
 
 failures: list[str] = []
@@ -784,11 +799,22 @@ def test_template_round_trip():
           f"{len(root['blocks'])} vs {grid.filled()}")
     check("template carries the vendored DataVersion",
           root["DataVersion"] == data_version(), str(root["DataVersion"]))
-    check("reading a template back gives the same blocks",
-          back.counts() == grid.counts(), f"{back.counts()} vs {grid.counts()}")
+    check("reading a template back gives the same blocks in the same places",
+          sorted(back.items()) == sorted(grid.items()),
+          f"{sorted(back.items())[:3]} vs {sorted(grid.items())[:3]}")
     check("block entities survive the round trip",
           back.block_entities.get((0, 1, 0), {}).get("LootTable")
           == "minecraft:chests/simple_dungeon", str(back.block_entities))
+
+    outside = Grid(10, 1, 10)
+    outside.fill(-5, 0, 0, -3, 0, 9, "minecraft:stone")
+    check("a fill wholly outside the grid touches nothing",
+          outside.filled() == 0, str(outside.filled()))
+    buried = Grid(4, 4, 4)
+    buried.set(1, 1, 1, "minecraft:chest[facing=north]", {"id": "minecraft:chest"})
+    buried.fill(0, 0, 0, 3, 3, 3, "minecraft:stone")
+    check("a fill takes the block entities under it with it",
+          not buried.block_entities, str(buried.block_entities))
 
     for spec in ("minecraft:chain", "minecraft:oak_stairs[facing=up]",
                  "minecraft:oak_stairs[nonsense=1]", "Stone", "minecraft:stone[",
@@ -866,8 +892,8 @@ def test_placement_geometry():
     one: one site per region, inside the spacing minus separation window, the
     box a rotated build covers, and the exclusion zone."""
     from worldsmith.pack import PackWriter
-    from worldsmith.placement import (Site, footprint, set_sites, site_rotation,
-                                      sites)
+    from worldsmith.placement import (Site, box_centre, footprint, region_chunk,
+                                      set_sites, site_rotation, sites)
     from worldsmith.registry import Registries
     from worldsmith.structures import spread
 
@@ -880,9 +906,12 @@ def test_placement_geometry():
     offsets = [(s.chunk_x % 8, s.chunk_z % 8) for s in found]
     check("every site is inside spacing minus separation",
           all(0 <= a < 5 and 0 <= b < 5 for a, b in offsets), str(offsets[:4]))
-    check("the same seed gives the same sites",
-          [(s.chunk_x, s.chunk_z) for s in sites(placement, 99, 0, 0, 500, 500)]
-          == [(s.chunk_x, s.chunk_z) for s in sites(placement, 99, 0, 0, 500, 500)])
+    # pinned, so a sign error in the region seed is a failure rather than a
+    # comparison of the mistake with itself
+    check("the sites are the ones this seed and salt give",
+          [(s.chunk_x, s.chunk_z) for s in sites(placement, 99, 0, 0, 500, 500)][:6]
+          == [(0, 3), (0, 8), (3, 17), (4, 25), (11, 2), (11, 11)],
+          str([(s.chunk_x, s.chunk_z) for s in sites(placement, 99, 0, 0, 500, 500)][:6]))
     check("a different salt moves them",
           [(s.chunk_x, s.chunk_z) for s in sites(dict(placement, salt=7), 99, 0, 0, 500, 500)]
           != [(s.chunk_x, s.chunk_z) for s in found])
@@ -903,8 +932,21 @@ def test_placement_geometry():
     check("a one block build is its anchor whatever the turn",
           all(footprint(site, 1, 1, r) == (32, 48, 32, 48)
               for r in ("NONE", "CLOCKWISE_90", "CLOCKWISE_180", "COUNTERCLOCKWISE_90")))
-    check("the turn is stable for a site",
-          site_rotation(99, 2, 3) == site_rotation(99, 2, 3))
+    check("the turn is the one the structure random gives",
+          [site_rotation(99, x, 3) for x in range(6)]
+          == ["COUNTERCLOCKWISE_90", "CLOCKWISE_180", "NONE", "NONE", "NONE",
+              "CLOCKWISE_90"],
+          str([site_rotation(99, x, 3) for x in range(6)]))
+    check("a triangular spread lands somewhere else than a linear one",
+          [(region_chunk(99, dict(placement, spread_type="triangular"), rx, 0).chunk_x,
+            region_chunk(99, dict(placement, spread_type="triangular"), rx, 0).chunk_z)
+           for rx in range(4)] == [(1, 2), (10, 4), (16, 0), (27, 2)])
+    check("box_centre truncates toward zero, as Java does",
+          (box_centre((-9, -9, 0, 0)), box_centre((0, 0, 9, 9))) == ((-4, -4), (4, 4)),
+          str((box_centre((-9, -9, 0, 0)), box_centre((0, 0, 9, 9)))))
+    check("a quarter turn the other way grows the other way",
+          footprint(site, 64, 32, "COUNTERCLOCKWISE_90") == (32, -15, 63, 48),
+          str(footprint(site, 64, 32, "COUNTERCLOCKWISE_90")))
 
     with tempfile.TemporaryDirectory() as tmp:
         writer = PackWriter(Path(tmp) / "p", "test")
@@ -933,6 +975,7 @@ def test_structure_validation():
     from worldsmith.validate import Validator
     from worldsmith.voxel import Grid
 
+    @memo
     def findings(build_pack):
         with tempfile.TemporaryDirectory() as tmp:
             writer = PackWriter(Path(tmp) / "p", "test")
@@ -1055,8 +1098,11 @@ def test_set_reports():
 
     entries = [{"structure": "test:small", "weight": 1}, {"structure": "test:large", "weight": 3}]
     picks = [chosen_build(11, Site(x, z), entries) for x in range(20) for z in range(20)]
-    check("the choice is stable for a site",
-          chosen_build(11, Site(3, 4), entries) == chosen_build(11, Site(3, 4), entries))
+    check("the choice is the one the structure random gives",
+          [chosen_build(11, Site(3, z), entries) for z in range(6)]
+          == ["test:small", "test:small", "test:large", "test:large", "test:large",
+              "test:large"],
+          str([chosen_build(11, Site(3, z), entries) for z in range(6)]))
     check("every pick is one of the set's builds",
           set(picks) <= {"test:small", "test:large"}, str(set(picks)))
     share = picks.count("test:large") / len(picks)
@@ -1098,8 +1144,17 @@ def test_set_reports():
     stand.fill(1, 3, 1, 3, 5, 3, "minecraft:air")
     check("a standing spot is solid with head room above it",
           stand.standing_spot() == (2, 2, 2), str(stand.standing_spot()))
+    roofed = Grid(3, 4, 3)
+    roofed.fill(0, 0, 0, 2, 0, 2, "minecraft:stone")
+    roofed.fill(0, 1, 0, 2, 1, 2, "minecraft:stone")
     check("a solid block with nothing placed above it is not a standing spot",
-          Grid(3, 3, 3).standing_spot() is None)
+          roofed.standing_spot() is None, str(roofed.standing_spot()))
+    check("an empty box has nowhere to stand", Grid(3, 3, 3).standing_spot() is None)
+    floor = Grid(5, 6, 5)
+    floor.fill(0, 0, 0, 4, 0, 4, "minecraft:stone")
+    floor.fill(0, 1, 0, 4, 5, 4, "minecraft:air")
+    check("a floor on the bottom layer is somewhere to stand",
+          floor.standing_spot() == (2, 0, 2), str(floor.standing_spot()))
 
 
 def test_template_validation():
@@ -1116,6 +1171,7 @@ def test_template_validation():
              "palette": [{"Name": "minecraft:stone_bricks"}],
              "DataVersion": data_version()}
 
+    @memo
     def findings(template=None, *, wire=True, extra=None):
         with tempfile.TemporaryDirectory() as tmp:
             writer = PackWriter(Path(tmp) / "p", "test")
@@ -1237,7 +1293,7 @@ def test_packed_longs():
     """Block states, biomes and heightmaps are all read through unpack_longs, so
     it is checked against the plain loop it replaced, at every width the game
     uses and across the sign boundary."""
-    from worldsmith.anvil import unpack_longs
+    from worldsmith.anvil import unpack_heightmap, unpack_longs
 
     def plain(packed, bits, count):
         per_long, mask = 64 // bits, (1 << bits) - 1
@@ -1261,6 +1317,12 @@ def test_packed_longs():
     check("unpacking agrees with the plain loop at every width", agreed == 30, str(agreed))
     check("a section of 4 bit states unpacks to 4096 entries",
           len(unpack_longs(np.zeros(256, dtype=np.int64), 4, 4096)) == 4096)
+    # heightmap entries are as wide as the world is tall, so a dimension shorter
+    # or taller than the overworld packs a different number of them per long
+    for height, words in ((128, 32), (384, 37), (512, 43)):
+        check(f"a {height} tall world unpacks its heightmap",
+              unpack_heightmap(np.zeros(words, dtype=np.int64), height).shape == (16, 16),
+              str(unpack_heightmap(np.zeros(words, dtype=np.int64), height).shape))
 
 
 def test_scaffold_with_build():
@@ -1294,6 +1356,10 @@ def test_scaffold_with_build():
         check("the scaffolded build is keyed to a biome the pack places",
               set(structure["biomes"]) & set(registries.packs[-1].data["biome"]),
               str(structure["biomes"]))
+        # pinned rather than compared with a second scaffold in this process,
+        # because python only salts string hashing between processes
+        salt = registries.get("structure_set", "demo:huts")["placement"]["salt"]
+        check("the same namespace always gets the same salt", salt == 706848, str(salt))
 
 
 def test_build_on_site():
@@ -1316,7 +1382,26 @@ def test_build_on_site():
         grid, report = build_on_site(registries, world, source, "demo:hut", 4242, margin=6)
         template = Grid.load(registries.templates["demo:hut"])
 
+        # start_pool is a pool id, so the template is whatever that pool points
+        # at, and naming the pool something else must not change the answer
+        moved = json.loads((root / "data/demo/worldgen/template_pool/hut.json").read_text())
+        (root / "data/demo/worldgen/template_pool/elsewhere.json").write_text(
+            json.dumps(moved), encoding="utf-8")
+        (root / "data/demo/worldgen/template_pool/hut.json").unlink()
+        structure_json = root / "data/demo/worldgen/structure/hut.json"
+        obj = json.loads(structure_json.read_text())
+        obj["start_pool"] = "demo:elsewhere"
+        structure_json.write_text(json.dumps(obj), encoding="utf-8")
+        renamed = Registries.load([root])
+        _, renamed_report = build_on_site(renamed, world, source, "demo:hut", 4242, margin=6)
+        try:
+            build_on_site(renamed, world, source, "demo:hut", 4242, index=99999)
+            renamed_pool_error = False
+        except SystemExit:
+            renamed_pool_error = True
+
     check("the site is one the game would keep", report.accepted)
+    check("a site past the last one is refused with a message", renamed_pool_error)
     check("the box is the build's own size",
           report.box[2] - report.box[0] + 1 == template.sx, str(report.box))
     check("the drawing is the build plus its margin",
@@ -1329,6 +1414,9 @@ def test_build_on_site():
           "minecraft:stone" in names, str(names))
     solid = sum(1 for _, spec in grid.items())
     check("the drawing is not empty", solid > template.filled(), str(solid))
+    check("renaming the pool does not move the build",
+          (renamed_report.box, renamed_report.floor_y) == (report.box, report.floor_y),
+          f"{renamed_report.box} vs {report.box}")
 
 
 def test_cli_smoke():
@@ -1419,6 +1507,18 @@ def test_biome_tags_resolve():
     check("a list of ids and tags together expands to both",
           registries.biome_set(["minecraft:desert", "#minecraft:is_forest"])
           == forest | {"minecraft:desert"})
+    check("a tag that is not there gives no answer at all",
+          registries.biome_set("#minecraft:no_such_tag") is None)
+    missing = set()
+    registries.biome_set(["#minecraft:is_forest", "#minecraft:no_such_tag"],
+                         missing=missing)
+    check("and says which tag it was", missing == {"#minecraft:no_such_tag"}, str(missing))
+    check("an optional entry that is not there is skipped, not fatal",
+          registries.biome_set(["minecraft:desert",
+                                {"id": "#minecraft:no_such_tag", "required": False}])
+          == {"minecraft:desert"},
+          str(registries.biome_set(["minecraft:desert",
+                                    {"id": "#minecraft:no_such_tag", "required": False}])))
     check("a tag that is not here expands to nothing rather than a guess",
           registries.biome_set("#minecraft:no_such_tag") is None)
     check("an id without a namespace is still an id",
@@ -1464,10 +1564,20 @@ def test_shapes():
     picks = [speckle(x, 0, z, mix) for x in range(40) for z in range(40)]
     check("speckle only returns blocks from the mix",
           set(picks) <= {"minecraft:stone", "minecraft:cobblestone"}, str(set(picks)))
-    check("speckle answers the same for the same block",
-          speckle(3, 4, 5, mix) == speckle(3, 4, 5, mix))
+    check("speckle picks the same block for a position every time",
+          [speckle(3, 4, z, mix).split(":")[1] for z in range(6)]
+          == ["stone", "stone", "stone", "cobblestone", "stone", "stone"],
+          str([speckle(3, 4, z, mix).split(":")[1] for z in range(6)]))
+    check("a salt moves the pattern without changing the weights",
+          [speckle(x, 0, z, mix, salt=7) for x in range(40) for z in range(40)] != picks)
     share = picks.count("minecraft:stone") / len(picks)
     check("speckle follows the weights", 0.68 < share < 0.82, f"{share:.2f}")
+
+    thin = Grid(4, 3, 4)
+    hollow_box(thin, 0, 0, 0, 1, 2, 1, "minecraft:stone_bricks")
+    check("a box too thin for its walls stays solid",
+          all(thin.name_at(x, 1, z) == "stone_bricks" for x in (0, 1) for z in (0, 1)),
+          str([thin.name_at(x, 1, z) for x in (0, 1) for z in (0, 1)]))
 
     grid = Grid(9, 6, 9)
     fill(grid, 0, 0, 0, 8, 0, 8, lambda x, y, z: speckle(x, y, z, mix))
