@@ -8,5 +8,5 @@ __pycache__/
 tools/oracle/node_modules/
 tools/oracle/package-lock.json
 
-# scratch pack written by tools/verify_placement.py
-packs/_placement_probe/
+# scratch packs written by the verification tools
+packs/_*/
