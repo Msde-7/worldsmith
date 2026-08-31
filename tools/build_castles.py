@@ -456,12 +456,14 @@ class Castle:
                 z = 26 + step
                 self.stair(x, GROUND + 1 + step, z, "south")
                 self.stone(x, GROUND, z, x, GROUND + step, z)
-        # torches along the inside of the wall
+        # torches on the inside face of the wall. A wall torch hangs off the
+        # block behind it, which is the one opposite its facing, so it sits one
+        # block into the bailey and faces away from the wall
         for t in range(BAILEY + 2, SIZE - BAILEY - 1, 6):
-            g.set(t, GROUND + 4, WALL_IN, "minecraft:wall_torch[facing=north]")
-            g.set(t, GROUND + 4, SIZE - 1 - WALL_IN, "minecraft:wall_torch[facing=south]")
-            g.set(WALL_IN, GROUND + 4, t, "minecraft:wall_torch[facing=west]")
-            g.set(SIZE - 1 - WALL_IN, GROUND + 4, t, "minecraft:wall_torch[facing=east]")
+            g.set(t, GROUND + 4, WALL_IN + 1, "minecraft:wall_torch[facing=south]")
+            g.set(t, GROUND + 4, SIZE - 2 - WALL_IN, "minecraft:wall_torch[facing=north]")
+            g.set(WALL_IN + 1, GROUND + 4, t, "minecraft:wall_torch[facing=east]")
+            g.set(SIZE - 2 - WALL_IN, GROUND + 4, t, "minecraft:wall_torch[facing=west]")
 
     def building(self, x0, z0, w, d, height, wall, roof, base=GROUND) -> None:
         """A small gabled building: walls, a ridged roof of stairs, a door and
@@ -809,6 +811,7 @@ def main() -> int:
     pack = ROOT / "packs" / "castle_country"
     renders = ROOT / "renders"
     writer = PackWriter(pack, "Castle country - crags, downs and oak woods", "26.2")
+    writer.mcmeta()
     print("building templates")
 
     great = Castle().build()
