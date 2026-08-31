@@ -385,13 +385,11 @@ def template_basic(ns: str, name: str, *, caves: bool = False, decoration=None) 
     return files
 
 
-def starter_build(ns: str, biomes: list[str]) -> tuple:
-    """A small stone hut, scaffolded so a pack has a working build to change.
+def starter_build() -> tuple:
+    """A small stone hut, and the sink that lands its floor on the ground.
 
-    Deliberately plain and deliberately complete: a buried footing, a floor, a
-    doorway, a window, a light and a hollow inside, which is every part of a
-    build that has to be right before anything more interesting can be. It is
-    also the shortest demonstration of worldsmith.shapes.
+    Plain but complete, with a buried footing, a doorway, a window, a light and
+    a hollow inside, which is every part a build has to get right.
     """
     from .shapes import crenellate, fill, hollow_box, perimeter, speckle
     from .voxel import Grid
@@ -420,7 +418,7 @@ def starter_build(ns: str, biomes: list[str]) -> tuple:
     grid.set(4, floor + 4, 4, "minecraft:lantern[hanging=true]")
     grid.set(2, floor + 1, 2, "minecraft:chest[facing=east]",
              {"id": "minecraft:chest", "LootTable": "minecraft:chests/simple_dungeon"})
-    return grid, -(floor + 1), biomes
+    return grid, -(floor + 1)
 
 
 TEMPLATES = {"basic": template_basic}

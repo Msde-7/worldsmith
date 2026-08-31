@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import os
 import zipfile
+import zlib
 from pathlib import Path
 
+from . import structures
 from .registry import CATEGORIES, TEMPLATE_DIR, Registries
 from .templates import PACK_FORMAT, TEMPLATES, starter_build
 
@@ -92,13 +94,12 @@ def scaffold(root, namespace: str, name: str, template: str = "basic",
         dimension = files["dimension"][f"{namespace}:{name}"]
         writer.add("dimension", "minecraft:overworld", dimension)
     if with_build:
-        from . import structures
-        biomes = sorted(files["biome"])
-        grid, sink, biomes = starter_build(namespace, biomes)
-        structures.add(writer, f"{namespace}:hut", grid, biomes, sink=sink)
+        grid, sink = starter_build()
+        structures.add(writer, f"{namespace}:hut", grid, sorted(files["biome"]), sink=sink)
+        # crc32, not hash(), which python salts differently in every process
         writer.add("structure_set", f"{namespace}:huts",
                    structures.spread(f"{namespace}:hut", spacing=12, separation=5,
-                                     salt=abs(hash(namespace)) % 1000000))
+                                     salt=zlib.crc32(namespace.encode()) % 1000000))
     return writer
 
 
