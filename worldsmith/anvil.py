@@ -69,23 +69,27 @@ def unpack_longs(packed: np.ndarray, bits: int, count: int) -> np.ndarray:
     return values.reshape(-1)[:count].astype(np.int64)
 
 
-def unpack_heightmap(packed: np.ndarray, bits: int = 9) -> np.ndarray:
-    return unpack_longs(packed, bits, 256).reshape(16, 16)          # [z][x]
+def unpack_heightmap(packed: np.ndarray, world_height: int = 384) -> np.ndarray:
+    """A chunk's heightmap, [z][x]. Entries are as wide as the world is tall, so
+    a dimension shorter or taller than the overworld packs them differently."""
+    bits = max(1, math.ceil(math.log2(world_height + 1)))
+    return unpack_longs(packed, bits, 256).reshape(16, 16)
 
 
 def _paletted(section: dict, key: str, count: int, side: int):
+    """A section's block or biome names, as (side, side, side) indexed [y][z][x]."""
     holder = section.get(key) or {}
     palette = [str(entry.get("Name") if isinstance(entry, dict) else entry)
                for entry in (holder.get("palette") or [])]
     if not palette:
-        return None, None
+        return None
     data = holder.get("data")
     if data is None or len(data) == 0:
         index = np.zeros(count, dtype=np.int64)
     else:
         bits = max(4 if key == "block_states" else 1, math.ceil(math.log2(len(palette))))
         index = unpack_longs(np.asarray(data), bits, count)
-    return np.array(palette, dtype=object)[index].reshape(side, side, side), palette
+    return np.array(palette, dtype=object)[index].reshape(side, side, side)
 
 
 def section_blocks(chunk: dict, lo: int, hi: int) -> dict[int, np.ndarray]:
@@ -95,7 +99,7 @@ def section_blocks(chunk: dict, lo: int, hi: int) -> dict[int, np.ndarray]:
         base = int(section.get("Y", 0)) * 16
         if base > hi or base + 15 < lo:
             continue
-        names, _ = _paletted(section, "block_states", 4096, 16)
+        names = _paletted(section, "block_states", 4096, 16)
         if names is None:
             continue
         for dy in range(16):
@@ -110,7 +114,7 @@ def biome_at(chunk: dict, x: int, y: int, z: int) -> str | None:
         base = int(section.get("Y", 0)) * 16
         if not (base <= y < base + 16):
             continue
-        names, _ = _paletted(section, "biomes", 64, 4)
+        names = _paletted(section, "biomes", 64, 4)
         if names is None:
             return None
         return str(names[(y - base) // 4][(z & 15) // 4][(x & 15) // 4])
@@ -156,6 +160,9 @@ def read_box(world: Path, x0: int, z0: int, x1: int, z1: int, y0: int, y1: int) 
     """The blocks in a box of the world, as a Grid the previewer can draw."""
     grid = Grid(x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1)
     known, _ = block_states()
+    # cave_air and void_air are air the game carved, and drawing them as blocks
+    # would fill every cave the build stands over
+    air = ("minecraft:air", "minecraft:cave_air", "minecraft:void_air")
     for path in sorted(region_dir(world).glob("*.mca")):
         rx, rz = (int(part) for part in path.stem.split(".")[1:3])
         if not (rx * 512 <= x1 and rx * 512 + 511 >= x0
@@ -165,15 +172,13 @@ def read_box(world: Path, x0: int, z0: int, x1: int, z1: int, y0: int, y1: int) 
             bx, bz = cx * 16, cz * 16
             if bx > x1 or bx + 15 < x0 or bz > z1 or bz + 15 < z0:
                 continue
+            xs = range(max(0, x0 - bx), min(16, x1 - bx + 1))
+            zs = range(max(0, z0 - bz), min(16, z1 - bz + 1))
             for y, plane in section_blocks(chunk, y0, y1).items():
-                for dz in range(16):
-                    wz = bz + dz
-                    if not z0 <= wz <= z1:
-                        continue
-                    for dx in range(16):
-                        wx = bx + dx
+                for dz in zs:
+                    for dx in xs:
                         name = str(plane[dz][dx])
-                        if not x0 <= wx <= x1 or name == "minecraft:air" or name not in known:
+                        if name in air or name not in known:
                             continue
-                        grid.set(wx - x0, y - y0, wz - z0, name)
+                        grid.set(bx + dx - x0, y - y0, bz + dz - z0, name)
     return grid

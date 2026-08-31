@@ -10,10 +10,11 @@ Four views, because they answer different questions:
 from __future__ import annotations
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from .canopy import (COLORMAPPED_LEAVES, SOIL, canopy_field, canopy_for, canopy_mottle,
                      cover_cutoff)
+from .draw import font as _font
 from .colors import (biome_color, block_color, foliage_color, grass_color, palette_rgb,
                      parse_hex)
 from .scene import Scene, biome_climate_table
@@ -215,15 +216,6 @@ def render_section(world: World, x0: int, z: int, length: int, scale: int = 2,
 
     img = Image.fromarray(np.clip(rgb[::-1], 0, 255).astype(np.uint8), "RGB")
     return _upscale(img, scale)
-
-
-def _font(size: int = 12):
-    for name in ("DejaVuSans.ttf", "arial.ttf", "segoeui.ttf"):
-        try:
-            return ImageFont.truetype(name, size)
-        except OSError:
-            continue
-    return ImageFont.load_default()
 
 
 def contact_sheet(images: list[tuple[str, Image.Image]], columns: int = 2,

@@ -187,7 +187,7 @@ def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
             packed = (nbt.get("Heightmaps") or {}).get("OCEAN_FLOOR")
             if packed is None or len(packed) == 0:
                 continue
-            game = unpack_heightmap(np.asarray(packed)) + engine.noise.min_y
+            game = unpack_heightmap(np.asarray(packed), engine.noise.height) + engine.noise.min_y
             terrain = sample_terrain(engine, cx * 16, cz * 16, 16, 16, step=1)
             # OCEAN_FLOOR stores the y of the first non-solid block, relative to min_y
             mine = terrain.surface_y + 1

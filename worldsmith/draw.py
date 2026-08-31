@@ -9,17 +9,25 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from .colors import block_color
 from .voxel import Grid
 
 BACKGROUND = (26, 28, 34)
 KEPT = (255, 214, 102)
-REJECTED = (150, 156, 170)
+MUTED = (150, 156, 170)
 LABEL = (210, 214, 224)
-FADED = (150, 156, 170)
 FACE_SHADE = (1.0, 0.72, 0.55)          # top, right, front
+
+
+def font(size: int = 12):
+    for name in ("DejaVuSans.ttf", "arial.ttf", "segoeui.ttf"):
+        try:
+            return ImageFont.truetype(name, size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
 
 
 def _palette(grid: Grid) -> tuple[dict[int, tuple[int, int, int]], set[int]]:
@@ -27,7 +35,7 @@ def _palette(grid: Grid) -> tuple[dict[int, tuple[int, int, int]], set[int]]:
     for index, spec in enumerate(grid.palette, start=1):
         name = spec.split("[")[0].split(":")[-1]
         colors[index] = block_color(name)
-        if name == "air":
+        if name.endswith("air"):        # cave_air and void_air are air too
             air.add(index)
     return colors, air
 
@@ -51,12 +59,12 @@ def render_iso(grid: Grid, path, scale: int = 4, turn: int = 0, label: str = "")
 
     sx, sy, sz = cells.shape
     w, h, v = scale, max(1, scale // 2), scale
-    pad, header = 8, 14 if label else 0
+    pad, header = 8, 20 if label else 0
     image = Image.new("RGB", ((sx + sz) * w + 2 * pad,
                               (sx + sz) * h + sy * v + 2 * pad + header), BACKGROUND)
     draw = ImageDraw.Draw(image)
     if label:
-        draw.text((pad, 3), label, fill=LABEL)
+        draw.text((pad, 4), label, fill=LABEL, font=font(13))
     ox, oy = sz * w + pad, pad + header + sy * v
 
     xs, ys, zs = np.nonzero(visible)
@@ -80,16 +88,16 @@ def render_plan(grid: Grid, path, levels: list[int], scale: int = 4,
                 label: str = "") -> Path:
     """Top down slices at the given heights: the floor plans."""
     colors, air = _palette(grid)
-    pad, header, gap = 6, 16, 10
+    pad, header, gap = 6, 38, 10
     tile_w, tile_h = grid.sx * scale, grid.sz * scale
     image = Image.new("RGB", (2 * pad + len(levels) * tile_w + (len(levels) - 1) * gap,
                               2 * pad + header + tile_h), BACKGROUND)
     draw = ImageDraw.Draw(image)
     if label:
-        draw.text((pad, 3), label, fill=LABEL)
+        draw.text((pad, 4), label, fill=LABEL, font=font(13))
     for i, level in enumerate(levels):
         ox = pad + i * (tile_w + gap)
-        draw.text((ox, header - 12), f"y={level}", fill=FADED)
+        draw.text((ox, header - 16), f"y={level}", fill=MUTED, font=font(12))
         plane = grid.cells[:, level, :]
         for x in range(grid.sx):
             for z in range(grid.sz):
@@ -104,13 +112,13 @@ def render_plan(grid: Grid, path, levels: list[int], scale: int = 4,
     return path
 
 
-def mark_builds(image, reports, x0: int, z0: int, step: int, scale: int):
+def mark_builds(image, reports, x0: int, z0: int, step: int, scale: int) -> None:
     """Outline where builds land on a rendered map.
 
     The map is drawn at `scale` pixels per `step` blocks, so a footprint in
     blocks becomes a rectangle in pixels. Sites the biome check rejects are
-    drawn faintly: seeing where a build nearly went is half of why the picture
-    is worth looking at.
+    drawn faintly, because seeing where a build nearly went is half of why the
+    picture is worth looking at.
     """
     draw = ImageDraw.Draw(image)
     for report in reports:
@@ -121,10 +129,9 @@ def mark_builds(image, reports, x0: int, z0: int, step: int, scale: int):
         pz1 = round((bz1 + 1 - z0) / step * scale) - 1
         if px1 < 0 or pz1 < 0 or px0 >= image.width or pz0 >= image.height:
             continue
-        colour = KEPT if report.accepted else REJECTED
+        colour = KEPT if report.accepted else MUTED
         if px1 - px0 < 3 or pz1 - pz0 < 3:
             draw.rectangle([px0 - 2, pz0 - 2, px0 + 2, pz0 + 2], outline=colour)
         else:
             draw.rectangle([px0, pz0, px1, pz1], outline=colour,
                            width=2 if report.accepted else 1)
-    return image

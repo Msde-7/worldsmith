@@ -524,7 +524,9 @@ def test_clay_bands_against_the_game():
 
 
 def test_packs_generate():
-    packs = sorted(p for p in (Path(ROOT) / "packs").iterdir() if (p / "pack.mcmeta").is_file())
+    # the verification tools leave scratch packs behind; those are not the suite's
+    packs = sorted(p for p in (Path(ROOT) / "packs").iterdir()
+                   if (p / "pack.mcmeta").is_file() and not p.name.startswith("_"))
     check("there are packs to test", bool(packs))
     for pack in packs:
         _, findings = validate_path(pack)
@@ -1187,7 +1189,7 @@ def test_build_overlay_and_determinism():
     build actually is, in map pixels rather than blocks."""
     from PIL import Image
 
-    from worldsmith.draw import KEPT, REJECTED, mark_builds
+    from worldsmith.draw import KEPT, MUTED, mark_builds
     from worldsmith.placement import Site, SiteReport
     from worldsmith.voxel import Grid
 
@@ -1223,7 +1225,7 @@ def test_build_overlay_and_determinism():
 
     faint = Image.new("RGB", (128, 128), (0, 0, 0))
     mark_builds(faint, [report((64, 32, 95, 63), False)], x0=0, z0=0, step=4, scale=2)
-    check("a rejected site is drawn differently", faint.load()[32, 16] == REJECTED,
+    check("a rejected site is drawn differently", faint.load()[32, 16] == MUTED,
           str(faint.load()[32, 16]))
 
     off = Image.new("RGB", (128, 128), (0, 0, 0))
