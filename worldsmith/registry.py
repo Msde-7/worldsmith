@@ -115,10 +115,14 @@ class Registries:
             ident = "minecraft:" + ident
         return self.data[category].get(ident)
 
-    def biome_set(self, biomes, seen: set[str] | None = None) -> set[str] | None:
-        """Expand a biome list the way a structure's `biomes` field is written:
-        ids, or a tag, or a list mixing both. None means a tag is not here to
-        expand, in which case nothing downstream should pretend to know."""
+    def biome_set(self, biomes, seen: set[str] | None = None,
+                  missing: set[str] | None = None) -> set[str] | None:
+        """Expand a biome list the way a structure's `biomes` field is written,
+        as ids, or a tag, or a list mixing both. None means a tag is not here to
+        expand, in which case nothing downstream should pretend to know. The
+        tags that were not here are collected in `missing`, which is the one
+        thing a caller can say about it that is worth reading.
+        """
         if biomes is None:
             return None
         if isinstance(biomes, str):
@@ -126,7 +130,9 @@ class Registries:
         seen = set() if seen is None else seen
         out: set[str] = set()
         for entry in biomes:
+            required = True
             if isinstance(entry, dict):
+                required = entry.get("required", True) is not False
                 entry = entry.get("id")
             if not isinstance(entry, str):
                 continue
@@ -139,12 +145,28 @@ class Registries:
             seen.add(ident)
             tag = self.get("biome_tag", ident)
             if tag is None:
+                if not required:
+                    continue
+                if missing is not None:
+                    missing.add(entry)
                 return None
-            inner = self.biome_set(tag.get("values") or [], seen)
+            inner = self.biome_set(tag.get("values") or [], seen, missing)
             if inner is None:
                 return None
             out |= inner
         return out
+
+    def start_template(self, structure: dict | None):
+        """The .nbt a jigsaw structure starts from, reached through the pool it
+        names. `start_pool` is a template_pool id, not a template id, and the
+        two are usually written the same, which is what hides the difference."""
+        pool = self.get("template_pool", (structure or {}).get("start_pool") or "") or {}
+        for entry in pool.get("elements") or []:
+            location = ((entry or {}).get("element") or {}).get("location")
+            if isinstance(location, str):
+                return self.templates.get(location if ":" in location
+                                          else "minecraft:" + location)
+        return None
 
     def ids(self, category: str) -> list[str]:
         return sorted(self.data[category])

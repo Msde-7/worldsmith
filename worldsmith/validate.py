@@ -22,15 +22,6 @@ from .surface import (SURFACE_CONDITION_FIELDS, SURFACE_CONDITION_OPTIONAL,
 from .voxel import block_states, data_version, read_nbt
 from .world import BUILTIN_NOISE, ROUTER_FIELDS, SETTINGS_REQUIRED
 
-def template_has_air(path) -> bool:
-    """Whether a template places air, which the modern pool element throws away."""
-    try:
-        root = read_nbt(path)
-    except Exception:
-        return False
-    return any(str(state.get("Name")) == "minecraft:air" for state in root.get("palette") or [])
-
-
 ERROR, WARNING, INFO = "ERROR", "WARNING", "INFO"
 
 GENERATION_STEPS = ("raw_generation", "lakes", "local_modifications",
@@ -65,6 +56,15 @@ class Finding:
         return head if not self.hint else head + f"\n         hint: {self.hint}"
 
 
+def template_has_air(path) -> bool:
+    """Whether a template places air, which the modern pool element throws away."""
+    try:
+        root = read_nbt(path)
+    except Exception:
+        return False
+    return any(str(state.get("Name")) == "minecraft:air" for state in root.get("palette") or [])
+
+
 class Validator:
     def __init__(self, registries: Registries, pack: Pack | None = None, version: str = "26.2"):
         self.registries = registries
@@ -79,9 +79,6 @@ class Validator:
 
     def has(self, category: str, ident: str) -> bool:
         return self.registries.get(category, ident) is not None
-
-    def errors(self) -> list[Finding]:
-        return [f for f in self.findings if f.level == ERROR]
 
     def report(self) -> str:
         if not self.findings:
@@ -164,7 +161,7 @@ class Validator:
             self.add(INFO, where, "leading amplitude is 0: the first octave is skipped, "
                                   "which changes the effective scale")
 
-    def check_density(self, where, obj, depth: int, seen: tuple = ()):
+    def check_density(self, where, obj, depth: int):
         if depth > 96:
             self.add(ERROR, where, "density function nested more than 96 deep")
             return
@@ -175,8 +172,6 @@ class Validator:
             if not self.has("density_function", ident):
                 self.add(ERROR, where, f"reference to unknown density function '{obj}'",
                          "check spelling and that the file exists under worldgen/density_function/")
-            elif ident in seen:
-                self.add(ERROR, where, f"reference cycle through '{obj}'")
             return
         if not isinstance(obj, dict):
             self.add(ERROR, where, f"expected a number, id or object, got {type(obj).__name__}")
@@ -244,10 +239,10 @@ class Validator:
             if key not in obj:
                 continue
             if kind == "D":
-                self.check_density(f"{where}/{key}", obj[key], depth + 1, seen)
+                self.check_density(f"{where}/{key}", obj[key], depth + 1)
             elif kind == "D[]":
                 for i, sub in enumerate(obj[key] or []):
-                    self.check_density(f"{where}/{key}[{i}]", sub, depth + 1, seen)
+                    self.check_density(f"{where}/{key}[{i}]", sub, depth + 1)
 
     def check_spline(self, where, spline, depth):
         if isinstance(spline, (int, float)):
@@ -675,16 +670,17 @@ class Validator:
         self.check_structure_biomes(where, obj.get("biomes"))
 
     def check_structure_biomes(self, where, biomes):
-        if not biomes or (isinstance(biomes, list) and not biomes):
+        if not biomes:
             self.add(ERROR, where, "biomes is empty",
                      "a structure with no biomes never generates anywhere")
             return
-        expanded = self.registries.biome_set(biomes)
+        missing_tags: set[str] = set()
+        expanded = self.registries.biome_set(biomes, missing=missing_tags)
         if expanded is None:
-            tags = [b for b in ([biomes] if isinstance(biomes, str) else biomes)
-                    if isinstance(b, str) and b.startswith("#")]
-            self.add(WARNING, where, f"biome tag {', '.join(tags)} is not in this pack "
-                     "or the vendored vanilla data", "the biomes it lists cannot be checked")
+            self.add(WARNING, where,
+                     f"biome tag {', '.join(sorted(missing_tags))} is not in this "
+                     "pack or the vendored vanilla data",
+                     "the biomes it lists cannot be checked")
             return
         missing = [b for b in sorted(expanded) if not self.has("biome", b)]
         if missing:
@@ -697,16 +693,17 @@ class Validator:
                      "biome source can produce, or leave it for another world")
 
     def placed_biomes(self):
-        """Every biome this pack's own dimension can produce, or None if it has none."""
+        """Every biome this pack's own dimensions can produce, or None if it has none."""
         if self._placed_biomes is not False:
             return self._placed_biomes
-        self._placed_biomes = None
-        for ident, dimension in (self.pack.data["dimension"] if self.pack else {}).items():
+        found = set()
+        for dimension in (self.pack.data["dimension"] if self.pack else {}).values():
             source = (dimension.get("generator") or {}).get("biome_source") or {}
             try:
-                self._placed_biomes = set(BiomeSource.from_json(source, self.registries).biomes)
-            except ValueError:
-                self._placed_biomes = None
+                found |= set(BiomeSource.from_json(source, self.registries).biomes)
+            except Exception:          # a malformed source is check_biome's to report
+                continue
+        self._placed_biomes = found or None
         return self._placed_biomes
 
     def check_template_pool(self, ident, obj):
@@ -730,12 +727,13 @@ class Validator:
                 if not isinstance(location, str):
                     self.add(ERROR, spot, "no location", "the id of a template .nbt")
                     continue
+                location = _qualify(location)
                 path = self.registries.templates.get(location)
-                if path is None:
+                if path is None and self._owns(location):
                     self.add(ERROR, spot, f"no template {location}",
                              f"expected data/{location.split(':')[0]}/structure/"
                              f"{location.split(':')[-1]}.nbt")
-                elif kind == "minecraft:single_pool_element" and template_has_air(path):
+                elif path is not None and kind == "minecraft:single_pool_element"                         and template_has_air(path):
                     self.add(WARNING, spot,
                              "single_pool_element ignores the air in this template",
                              "use legacy_single_pool_element, or the rooms it hollows "
@@ -776,8 +774,8 @@ class Validator:
                          other_placement.get("salt")) == signature):
                 self.add(WARNING, where,
                          f"the same spacing, separation and salt as {other_id}",
-                         "they will pick the same chunks, so their builds land on "
-                         "each other; change one salt")
+                         "measured, two such sets put a build in the same 97 chunks "
+                         "and on the same block in every one, so change a salt")
 
     def check_biome_tag(self, ident, obj):
         """A biome tag is how a structure finds its biomes.
