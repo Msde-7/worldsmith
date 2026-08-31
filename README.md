@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white" alt="python 3.10 plus">
   <img src="https://img.shields.io/badge/minecraft-26.2-62B47A" alt="minecraft 26.2">
-  <img src="https://img.shields.io/badge/tests-455%20passing-4C9A2A" alt="455 tests passing">
+  <img src="https://img.shields.io/badge/tests-482%20passing-4C9A2A" alt="482 tests passing">
   <img src="https://img.shields.io/badge/license-MIT-999999" alt="MIT license">
 </p>
 
@@ -377,7 +377,7 @@ read out the real one: 7594 boxes over 55 biomes, vendored like the rest.
 ## Tests
 
 ```bash
-python tests/run_all.py                              # 307 checks, no network
+python tests/run_all.py                              # 482 checks, no network
 python tools/verify_in_game.py packs/basalt_spires   # the real game, opt-in
 python tools/extract_block_colors.py                 # re-read block colours from the client jar
 python tools/extract_worldgen_data.py                # re-read the preset biome tables and the features

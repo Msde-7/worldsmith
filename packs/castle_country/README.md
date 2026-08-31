@@ -40,5 +40,5 @@ Two details matter and are easy to get wrong:
 
 ## Checking it
 
-    python tools/find_castles.py --render 0   # draw one as the game built it
-    python tools/compare_castle.py            # template against world, block by block
+    python -m worldsmith.cli sites packs/castle_country
+    python -m worldsmith.cli inspect <world> --pack packs/castle_country --structure castle:great_castle --render renders/as_built.png
