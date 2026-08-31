@@ -363,12 +363,12 @@ exact per-block scan.
   much canopy a biome's tree features come to and paints that on the map, which
   is cover rather than placement; the rest never shows up in a render. Noise
   caves are the exception, since they live in the density functions.
-Vanilla itself, rendered by the engine, biomes and all. A dimension may name a
-preset rather than list its biomes, which is what copying vanilla's overworld
-and changing one spline gives you. Java assembles that table at runtime instead
-of shipping it as data, so mcmeta's copy of it is the preset name again, and
-`tools/extract_worldgen_data.py` runs the server jar's own data generator to
-read out the real one: 7594 boxes over 55 biomes, vendored like the rest.
+* **A dimension may name a biome preset** rather than list its biomes, which is
+  what copying vanilla's overworld and changing one spline gives you. Java
+  assembles that table at runtime instead of shipping it as data, so mcmeta's
+  copy of it is the preset name again. `tools/extract_worldgen_data.py` runs the
+  server jar's own data generator to read out the real one, 7594 boxes over 55
+  biomes, vendored like the rest.
 
 ![vanilla overworld](renders/vanilla_overworld.png)
 
