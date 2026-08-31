@@ -22,26 +22,21 @@ delete.
 from __future__ import annotations
 
 import argparse
-import gzip
-import math
 import shutil
-import struct
 import subprocess
 import sys
-import threading
 import time
-import zlib
 from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import worldsmith.voxel as _voxel
 from worldsmith.anvil import (read_region, region_dir, section_blocks,
-                             unpack_heightmap, unpack_longs)
+                             unpack_heightmap)
 from worldsmith.climate import BiomeSource
-from worldsmith.play import RUNTIME, as_overworld, ensure_runtime
+from worldsmith.play import (RUNTIME, as_overworld, drain, ensure_runtime,
+                              send, shut_down, wait_for_ready)
 from worldsmith.registry import Pack, Registries
 from worldsmith.scene import build_scene
 from worldsmith.terrain import sample_terrain
@@ -50,10 +45,6 @@ from worldsmith.world import World
 # the block pass builds a scene per chunk, so it looks at fewer than the
 # heightmap pass, which reads one array
 BLOCK_CHUNKS = 24
-
-# the NBT and region readers live in the library now, so the tools and the
-# engine share one implementation
-NbtReader = _voxel.NbtReader
 
 
 def is_decorated(registries: Registries, pack: Pack) -> bool:
@@ -89,45 +80,39 @@ def run_server(java: Path, jar: Path, work: Path, pack: Path, seed: int,
         stderr=subprocess.STDOUT, text=True, bufsize=1)
     started = time.time()
     lines: list[str] = []
-    ready = False
-    for line in proc.stdout:
-        lines.append(line.rstrip())
-        low = line.lower()
-        if "error" in low or "failed" in low or "exception" in low:
-            print("  " + line.rstrip())
-        if 'for help, type "help"' in low or "done (" in low:
-            ready = True
-            break
-        if time.time() - started > start_timeout:
-            break
-    if not ready:
-        proc.kill()
+    try:
+        _drive_server(proc, work, lines, started, start_timeout, generate_timeout)
+    finally:
+        shut_down(proc)
+        (work / "server.log").write_text("\n".join(lines), encoding="utf-8")
+    return work / "world"
+
+
+def _drive_server(proc, work: Path, lines: list[str], started: float,
+                  start_timeout: int, generate_timeout: int) -> None:
+    if not wait_for_ready(proc, lines, start_timeout,
+                          ("error", "failed", "exception"),
+                          lambda text: print("  " + text)):
         raise SystemExit("server never reported ready:\n" + "\n".join(lines[-40:]))
     print(f"  server up in {time.time() - started:.0f}s; force-loading chunks")
-
-    def drain():
-        for text in proc.stdout:
-            lines.append(text.rstrip())
-
-    threading.Thread(target=drain, daemon=True).start()
-
-    def send(command: str):
-        proc.stdin.write(command + "\n")
-        proc.stdin.flush()
+    drain(proc, lines)
 
     # Modern servers barely pre-generate anything, so ask explicitly. forceload
     # takes at most 256 chunks per command, hence the 256-block tiles.
     for cz in range(-16, 16, 16):
         for cx in range(-16, 16, 16):
-            send(f"forceload add {cx * 16} {cz * 16} {(cx + 15) * 16 + 15} {(cz + 15) * 16 + 15}")
+            send(proc, f"forceload add {cx * 16} {cz * 16} "
+                       f"{(cx + 15) * 16 + 15} {(cz + 15) * 16 + 15}")
 
-    region_root = region_dir(work / "world")
     deadline = time.time() + generate_timeout
     stable, last = 0, -1
     while time.time() < deadline:
         time.sleep(6)
-        send("save-all flush")
+        send(proc, "save-all flush")
         time.sleep(4)
+        # resolved every pass: the game only writes the nested layout once it
+        # has a chunk to save, so this directory does not exist yet at the start
+        region_root = region_dir(work / "world")
         size = (sum(f.stat().st_size for f in region_root.glob("*.mca"))
                 if region_root.is_dir() else 0)
         print(f"  region data: {size / 1024:.0f} KB")
@@ -139,15 +124,8 @@ def run_server(java: Path, jar: Path, work: Path, pack: Path, seed: int,
             stable = 0
         last = size
 
-    send("save-all flush")
+    send(proc, "save-all flush")
     time.sleep(3)
-    send("stop")
-    try:
-        proc.wait(timeout=180)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    (work / "server.log").write_text("\n".join(lines), encoding="utf-8")
-    return work / "world"
 
 
 def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
@@ -173,6 +151,8 @@ def compare(world_dir: Path, pack: Path, seed: int, sample: int = 0) -> int:
     worst: list[tuple[int, int, int, int]] = []
     block_worst: list[tuple] = []
     for path in files:
+        if sample and compared >= sample:
+            break
         chunks = read_region(path)
         # A chunk only carries its final heightmap once it reaches `full`.
         # Including half-generated ones is what makes the numbers look worse

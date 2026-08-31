@@ -34,6 +34,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .anvil import region_dir
 from .pack import export_zip
 from .placement import box_centre, owning_set, set_reports
 from .registry import Registries
@@ -327,6 +328,62 @@ def server_properties(seed: int, gamemode: str) -> str:
     ])
 
 
+SERVER_READY = 'for help, type "help"'
+
+
+def send(proc, command: str) -> None:
+    """A command to a server that may already have died, which is not worth
+    raising over when the caller is on its way to reading the log anyway."""
+    try:
+        proc.stdin.write(command + "\n")
+        proc.stdin.flush()
+    except (BrokenPipeError, ValueError, OSError):
+        pass
+
+
+def wait_for_ready(proc, lines: list[str], timeout: int, watch=(), report=None) -> bool:
+    """Read the server until it says it is up. The deadline runs on a timer
+    because a readline that never returns cannot check one itself, and a server
+    that starts and then goes quiet would otherwise block for good."""
+    watchdog = threading.Timer(timeout, proc.kill)
+    watchdog.daemon = True
+    watchdog.start()
+    try:
+        for line in proc.stdout:
+            text = line.rstrip()
+            lines.append(text)
+            low = text.lower()
+            if report is not None and any(w in low for w in watch):
+                report(text)
+            if SERVER_READY in low or "done (" in low:
+                return True
+    finally:
+        watchdog.cancel()
+    return False
+
+
+def drain(proc, lines: list[str]) -> None:
+    """Keep reading in the background, so the server never blocks on a full pipe."""
+    threading.Thread(target=lambda: [lines.append(t.rstrip()) for t in proc.stdout],
+                     daemon=True).start()
+
+
+def shut_down(proc) -> None:
+    """Stop the server and let go of it, however the run ended."""
+    send(proc, "stop")
+    try:
+        proc.wait(timeout=240)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=30)
+    for stream in (proc.stdin, proc.stdout):
+        if stream is not None:
+            try:
+                stream.close()
+            except OSError:
+                pass
+
+
 def generate_world(runtime: Runtime, work: Path, pack: Path, seed: int,
                    spawn: Viewpoint, radius: int, gamemode: str, pregen_seconds: int) -> Path:
     work.mkdir(parents=True, exist_ok=True)
@@ -343,34 +400,26 @@ def generate_world(runtime: Runtime, work: Path, pack: Path, seed: int,
                             cwd=work, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT, text=True, bufsize=1)
     lines: list[str] = []
-    ready = False
-    started = time.time()
-    for line in proc.stdout:
-        lines.append(line.rstrip())
-        low = line.lower()
-        if "failed to load" in low or "exception" in low:
-            log("    " + line.rstrip())
-        if 'for help, type "help"' in low:
-            ready = True
-            break
-        if time.time() - started > 600:
-            break
-    if not ready:
-        proc.kill()
+    try:
+        _prepare_world(proc, work, lines, spawn, radius, pregen_seconds)
+    finally:
+        shut_down(proc)
         (work / "server.log").write_text("\n".join(lines), encoding="utf-8")
-        raise SystemExit("the server never finished starting; see " + str(work / "server.log"))
+    return work / "world"
 
-    threading.Thread(target=lambda: [lines.append(t.rstrip()) for t in proc.stdout],
-                     daemon=True).start()
 
-    def send(command: str):
-        proc.stdin.write(command + "\n")
-        proc.stdin.flush()
+def _prepare_world(proc, work: Path, lines: list[str], spawn: Viewpoint,
+                   radius: int, pregen_seconds: int) -> None:
+    if not wait_for_ready(proc, lines, 600, ("failed to load", "exception"),
+                          lambda text: log("    " + text)):
+        raise SystemExit("the server never finished starting; see "
+                         + str(work / "server.log"))
+    drain(proc, lines)
 
-    send(f"setworldspawn {spawn.x} {spawn.y} {spawn.z}")
-    send("gamerule keepInventory true")
-    send("time set day")
-    send("weather clear 1000000")
+    send(proc, f"setworldspawn {spawn.x} {spawn.y} {spawn.z}")
+    send(proc, "gamerule keepInventory true")
+    send(proc, "time set day")
+    send(proc, "weather clear 1000000")
 
     if pregen_seconds > 0 and radius > 0:
         # forceload brings chunks all the way to `full`, but takes at most 256
@@ -381,17 +430,20 @@ def generate_world(runtime: Runtime, work: Path, pack: Path, seed: int,
         z_start = ((spawn.z - radius) // 16) * 16
         for z0 in range(z_start, spawn.z + radius, 256):
             for x0 in range(x_start, spawn.x + radius, 256):
-                send(f"forceload add {x0} {z0} {x0 + 255} {z0 + 255}")
+                send(proc, f"forceload add {x0} {z0} {x0 + 255} {z0 + 255}")
                 tiles += 1
         log(f"    building up to {tiles * 256} chunks around spawn ({pregen_seconds}s budget)")
-        region_dir = work / "world" / "dimensions" / "minecraft" / "overworld" / "region"
         deadline = time.time() + pregen_seconds
         last, stable = -1, 0
         while time.time() < deadline:
             time.sleep(5)
-            send("save-all flush")
+            send(proc, "save-all flush")
             time.sleep(3)
-            size = sum(f.stat().st_size for f in region_dir.glob("*.mca")) if region_dir.is_dir() else 0
+            # resolved every pass, because the game only writes the region
+            # directory once it has a chunk to put in it
+            region = region_dir(work / "world")
+            size = (sum(f.stat().st_size for f in region.glob("*.mca"))
+                    if region.is_dir() else 0)
             if size == last and size > 0:
                 stable += 1
                 if stable >= 2:
@@ -399,17 +451,10 @@ def generate_world(runtime: Runtime, work: Path, pack: Path, seed: int,
             else:
                 stable = 0
             last = size
-        send("forceload remove all")
+        send(proc, "forceload remove all")
 
-    send("save-all flush")
+    send(proc, "save-all flush")
     time.sleep(4)
-    send("stop")
-    try:
-        proc.wait(timeout=240)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    (work / "server.log").write_text("\n".join(lines), encoding="utf-8")
-    return work / "world"
 
 
 def install_world(world_dir: Path, name: str) -> Path:

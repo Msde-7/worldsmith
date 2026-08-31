@@ -7,50 +7,62 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from worldsmith.play import ensure_runtime          # noqa: E402
+from worldsmith.play import (SERVER_READY, drain, ensure_runtime,  # noqa: E402
+                             send, shut_down, wait_for_ready)
 
 
-def run(work: Path, commands: list[str], settle: float = 6.0) -> list[str]:
+def run(work: Path, commands: list[str], settle: float = 6.0,
+        start_timeout: int = 900) -> list[str]:
+    """Boot the server in `work` and feed it commands. The directory needs the
+    world in it; the EULA and properties are written here if they are missing,
+    so this also works on one no other tool has been through."""
+    work.mkdir(parents=True, exist_ok=True)
+    eula = work / "eula.txt"
+    if not eula.is_file():
+        eula.write_text("eula=true\n", encoding="utf-8")
+    properties = work / "server.properties"
+    if not properties.is_file():
+        properties.write_text("level-name=world\nonline-mode=false\n"
+                              "max-tick-time=-1\nspawn-protection=0\n",
+                              encoding="utf-8")
+
     runtime = ensure_runtime("26.2")
     proc = subprocess.Popen(
         [str(runtime.java), "-Xmx2G", "-jar", str(runtime.jar), "nogui"],
         cwd=work, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, bufsize=1)
     lines: list[str] = []
-    for line in proc.stdout:
-        lines.append(line.rstrip())
-        if 'for help, type "help"' in line.lower():
-            break
-    threading.Thread(target=lambda: [lines.append(t.rstrip()) for t in proc.stdout],
-                     daemon=True).start()
-    for command in commands:
-        print(f"> {command}", flush=True)
-        proc.stdin.write(command + "\n")
-        proc.stdin.flush()
-        time.sleep(settle)
-    proc.stdin.write("save-all flush\n")
-    proc.stdin.flush()
-    time.sleep(4)
-    proc.stdin.write("stop\n")
-    proc.stdin.flush()
     try:
-        proc.wait(timeout=180)
-    except subprocess.TimeoutExpired:
-        proc.kill()
+        if not wait_for_ready(proc, lines, start_timeout):
+            raise SystemExit("server never reported ready:\n" + "\n".join(lines[-40:]))
+        drain(proc, lines)
+        for command in commands:
+            print(f"> {command}", flush=True)
+            send(proc, command)
+            time.sleep(settle)
+        send(proc, "save-all flush")
+        time.sleep(4)
+    finally:
+        shut_down(proc)
     return lines
 
 
-if __name__ == "__main__":
-    work = Path(sys.argv[1])
-    commands = sys.argv[2:]
-    output = run(work, commands)
+def main(argv: list[str]) -> int:
+    if not argv:
+        print("usage: python tools/server_console.py <server dir> [command ...]")
+        return 2
+    output = run(Path(argv[0]), argv[1:])
     start = next((i for i, line in enumerate(output)
-                  if 'for help, type "help"' in line.lower()), 0)
+                  if SERVER_READY in line.lower()), 0)
     for line in output[start:]:
         print(line)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
