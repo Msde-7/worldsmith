@@ -64,7 +64,7 @@ def build_probe(root: Path, size: int, spacing: int, separation: int,
     return sink
 
 
-def check_blocks(world: Path, reports, size: int, sink: int) -> None:
+def check_blocks(world: Path, reports, size: int) -> None:
     """Placement is only half the claim. This is the other half: the blocks the
     build is made of, where the model says they will be."""
     kept = [r for r in reports if r.accepted]
@@ -104,17 +104,24 @@ def compare(pack: Path, world: Path, seed: int, sink: int, size: int, biomes) ->
     reports = survey(model, source, found, seed=seed,
                      biomes=registries.biome_set(biomes), sink=sink,
                      size=(size, size), step=8)
-    check_blocks(world, reports, size, sink)
+    check_blocks(world, reports, size)
 
     predicted = {(r.site.chunk_x, r.site.chunk_z) for r in reports if r.accepted}
     missed = sorted(built - predicted)
     invented = sorted(predicted - built)
-    agree = len(found) - len(missed) - len(invented)
+    keys = {(s.chunk_x, s.chunk_z) for s in found}
+    agree = sum(1 for k in keys if (k in built) == (k in predicted))
     print(f"{len(evaluated)} chunks generated, {len(found)} sites in range")
     print(f"  server built  {len(built)}")
     print(f"  model expects {len(predicted)}")
     print(f"  agreement {agree}/{len(found)} sites "
           f"({100.0 * agree / max(1, len(found)):.2f}%)")
+    if not built or not predicted:
+        # agreeing that nothing was built is not evidence of anything, and it is
+        # what a probe pack the server failed to load looks like
+        print("  nothing was built, so there is nothing to agree about; "
+              "check the pack loaded and the biomes are ones this world has")
+        return 1
 
     by_chunk = {(r.site.chunk_x, r.site.chunk_z): r for r in reports}
     for label, group in (("built, model said no", missed),
@@ -139,13 +146,17 @@ def main() -> int:
     parser.add_argument("--radius", type=int, default=384)
     parser.add_argument("--pregen", type=int, default=120)
     parser.add_argument("--spread-type", default="linear", choices=("linear", "triangular"))
-    parser.add_argument("--biome-tag", help="name the biomes with a tag instead of a list")
+    parser.add_argument("--biome-tag", metavar="TAG",
+                        help="name the biomes with a tag instead of a list, "
+                             "e.g. minecraft:is_forest")
     parser.add_argument("--reuse", action="store_true", help="skip building the world")
     args = parser.parse_args()
 
     pack = ROOT / "packs" / "_placement_probe"
     work = play_mod.RUNTIME / "verify" / "placement"
-    biomes = args.biome_tag or BIOMES
+    # the game reads a bare id as a biome, so a tag has to keep its hash
+    biomes = BIOMES if not args.biome_tag else (
+        args.biome_tag if args.biome_tag.startswith("#") else "#" + args.biome_tag)
     sink = build_probe(pack, args.size, args.spacing, args.separation,
                        args.spread_type, biomes)
     if not args.reuse:
