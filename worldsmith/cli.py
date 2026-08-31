@@ -21,7 +21,7 @@ from .climate import PARAM_NAMES, BiomeSource, assign_biomes, climate_target
 from .density import Ctx, prepare
 from .draw import mark_builds, render_iso, render_plan
 from .pack import export_zip, scaffold
-from .placement import Site, box_centre, build_on_site, set_reports
+from .placement import Site, box_centre, build_on_site, owning_set_id, set_reports
 from .reference import reference_text
 from .registry import Registries
 from .render import contact_sheet, render_biomes, render_height, render_map, render_section
@@ -33,9 +33,26 @@ from .voxel import Grid
 from .world import World
 
 
+def _custom_dimensions(registries: Registries) -> list[str]:
+    """The dimensions the pack defines, as opposed to the vendored vanilla ones."""
+    return [i for i in registries.ids("dimension")
+            if registries.origin("dimension", i) != registries.packs[0].name]
+
+
+def _biome_source(registries: Registries, dimension: dict) -> BiomeSource:
+    """A dimension's biome source, or flat plains when it will not load, so a
+    render still says something about the terrain."""
+    try:
+        return BiomeSource.from_json((dimension.get("generator") or {}).get("biome_source") or {},
+                                     registries)
+    except ValueError as exc:
+        print(f"note: {exc}", file=sys.stderr)
+        return BiomeSource.from_json({"type": "minecraft:fixed", "biome": "minecraft:plains"})
+
+
 def _resolve_dimension(registries: Registries, dimension: str | None):
     ids = registries.ids("dimension")
-    custom = [i for i in ids if registries.origin("dimension", i) != registries.packs[0].name]
+    custom = _custom_dimensions(registries)
     if dimension is None:
         if len(custom) == 1:
             dimension = custom[0]
@@ -80,11 +97,7 @@ def _load(args) -> tuple[World, BiomeSource, str]:
         settings_id = generator.get("settings")
         if not isinstance(settings_id, str):
             raise SystemExit(f"{dim_id}: generator.settings must be a noise_settings id")
-        try:
-            source = BiomeSource.from_json(generator.get("biome_source") or {}, registries)
-        except ValueError as exc:
-            print(f"note: {exc}", file=sys.stderr)
-            source = BiomeSource.from_json({"type": "minecraft:fixed", "biome": "minecraft:plains"})
+        source = _biome_source(registries, dimension)
         label = dim_id
     return World.create(registries, settings_id, args.seed), source, label
 
@@ -326,8 +339,7 @@ def play_one(args, pack: Path, launch: bool) -> int:
     print("  1/5  looking for somewhere worth spawning")
     spawn = None
     if args.spawn_at:
-        source = BiomeSource.from_json((dimension.get("generator") or {}).get("biome_source") or {},
-                                       registries)
+        source = _biome_source(registries, dimension)
         spawn = play_mod.viewpoint_at_build(world, source, registries, args.spawn_at, args.seed)
         if spawn is None:
             print(f"       no {args.spawn_at} within reach; falling back to the terrain")
@@ -375,14 +387,11 @@ def play_one(args, pack: Path, launch: bool) -> int:
 def _build_world(args, registries):
     """The dimension to survey against. A pack of builds and nothing else is a
     normal use, so fall back to the vanilla overworld rather than refusing."""
-    ids = registries.ids("dimension")
-    custom = [i for i in ids if registries.origin("dimension", i) != registries.packs[0].name]
-    if args.dimension or custom:
+    if args.dimension or _custom_dimensions(registries):
         dim_id, dimension = _resolve_dimension(registries, args.dimension)
         settings = (dimension.get("generator") or {}).get("settings")
-        source = BiomeSource.from_json((dimension.get("generator") or {}).get("biome_source") or {},
-                                       registries)
-        return World.create(registries, settings, args.seed), source, dim_id
+        return (World.create(registries, settings, args.seed),
+                _biome_source(registries, dimension), dim_id)
     source = BiomeSource.from_json(
         {"type": "minecraft:multi_noise", "preset": "minecraft:overworld"}, registries)
     return World.create(registries, "minecraft:overworld", args.seed), source, "minecraft:overworld"
@@ -411,9 +420,6 @@ def cmd_build(args):
             levels = [int(v) for v in args.plan.split(",")]
         except ValueError:
             raise SystemExit(f"--plan takes heights like 8,14 (got {args.plan!r})")
-        bad = [v for v in levels if not 0 <= v < grid.sy]
-        if bad:
-            raise SystemExit(f"--plan level(s) {bad} are outside 0..{grid.sy - 1}")
 
     name = args.id.split(":")[-1].replace("/", "_")
     out = Path(args.out) if args.out else Path("renders") / f"{name}.png"
@@ -426,6 +432,10 @@ def cmd_build(args):
                  f"{report.floor_y}, {report.biome.split(':')[-1]}, "
                  f"{report.relief} blocks of relief")
         print(f"  site {args.site}: {label}")
+    # after --site, because that draws a taller grid than the template
+    bad = [v for v in levels if not 0 <= v < grid.sy]
+    if bad:
+        raise SystemExit(f"--plan level(s) {bad} are outside 0..{grid.sy - 1}")
     render_iso(grid, out, scale=args.scale, turn=args.turn, label=label)
     print(f"wrote {out}  ({grid.sx}x{grid.sy}x{grid.sz}, {grid.filled()} blocks)")
     if levels:
@@ -515,7 +525,10 @@ def cmd_inspect(args):
         raise SystemExit(f"{args.structure} is not in this world")
     unique = sorted({tuple(e["centre"]): e for e in entries}.values(),
                     key=lambda e: abs(e["centre"][0]) + abs(e["centre"][1]))
-    pick = unique[min(args.index, len(unique) - 1)]
+    if not 0 <= args.index < len(unique):
+        raise SystemExit(f"{args.structure} is placed {len(unique)} time(s) in this "
+                         f"world, so there is no --index {args.index}")
+    pick = unique[args.index]
     box = pick["box"]
     print(f"\n{args.structure} at {tuple(pick['centre'])}, turned {pick['rotation'].lower()}")
 
@@ -531,8 +544,7 @@ def cmd_inspect(args):
     if not args.pack:
         return 0
     registries = Registries.load([args.pack], version=args.version)
-    template_id = (registries.get("structure", args.structure) or {}).get("start_pool")
-    path = registries.templates.get(template_id or args.structure)
+    path = registries.start_template(registries.get("structure", args.structure))
     if path is None:
         print(f"  {args.pack} has no template for {args.structure}, nothing to compare")
         return 0
@@ -540,10 +552,7 @@ def cmd_inspect(args):
     # the model predicted where this would land before the world existed, so
     # say whether it was right
     world_model, source, _ = _build_world(args, registries)
-    owner = next((ident for ident in registries.ids("structure_set")
-                  if any(e.get("structure") == args.structure
-                         for e in (registries.get("structure_set", ident) or {}).get("structures") or [])),
-                 None)
+    owner = owning_set_id(registries, args.structure)
     if owner:
         site = Site(pick["chunk"][0], pick["chunk"][1])
         predicted = next((r for r in set_reports(registries, world_model, source, owner,

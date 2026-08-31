@@ -35,8 +35,11 @@ from pathlib import Path
 import numpy as np
 
 from .pack import export_zip
+from .placement import box_centre, owning_set, set_reports
 from .registry import Registries
+from .structures import rotate_xz
 from .terrain import sample_terrain
+from .voxel import Grid
 from .world import World
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -236,20 +239,7 @@ def viewpoint_at_build(world, source, registries, structure_id: str, seed: int,
     The placement model knows where builds land before the world is generated,
     so this needs no second pass over the finished world.
     """
-    from .placement import set_reports
-    from .structures import rotate_xz
-    from .voxel import Grid
-
-    structure = registries.get("structure", structure_id)
-    if structure is None:
-        raise SystemExit(f"unknown structure {structure_id}")
-    owner = next((ident for ident in registries.ids("structure_set")
-                  if any(e.get("structure") == structure_id
-                         for e in (registries.get("structure_set", ident)
-                                   or {}).get("structures") or [])),
-                 None)
-    if owner is None:
-        raise SystemExit(f"no structure set places {structure_id}")
+    structure, owner = owning_set(registries, structure_id)
     reports = [r for r in set_reports(registries, world, source, owner, seed,
                                       -reach, -reach, reach, reach)
                if r.build == structure_id]
@@ -261,14 +251,17 @@ def viewpoint_at_build(world, source, registries, structure_id: str, seed: int,
     # stand on the build itself. The ground beside it cannot be worked out from
     # the terrain alone: the game reshapes it around a structure, by up to ten
     # blocks, and worldsmith's terrain does not model that.
-    grid = Grid.load(registries.templates[structure.get("start_pool", structure_id)])
+    path = registries.start_template(structure)
+    if path is None:
+        return None
+    grid = Grid.load(path)
     spot = grid.standing_spot()
     if spot is None:
         return None
     offset_x, offset_z = rotate_xz(spot[0], spot[2], grid.sx, grid.sz, best.rotation)
     x, z = best.box[0] + offset_x, best.box[1] + offset_z
     y = best.floor_y + spot[1] + 1
-    middle = ((best.box[0] + best.box[2]) // 2, (best.box[1] + best.box[3]) // 2)
+    middle = box_centre(best.box)
     return Viewpoint(x, z, y, (middle[0], middle[1], best.floor_y + grid.sy),
                      f"on {structure_id.split(':')[-1]}")
 

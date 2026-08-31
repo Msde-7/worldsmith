@@ -48,34 +48,34 @@ class Site:
         return self.chunk_z * 16
 
 
-def site_rotation(seed: int, chunk_x: int, chunk_z: int) -> str:
-    """The turn the game gives a build here. It is the first draw from the
-    structure random, so it can be worked out without generating anything."""
+def chunk_random(seed: int, chunk_x: int, chunk_z: int) -> JavaRandom:
+    """The structure random for one chunk, seeded the way the game seeds it.
+    Rotation and the choice of build are its first two draws."""
     random = JavaRandom(0)
     random.set_seed(seed)
     a, b = random.next_long(), random.next_long()
     random.set_seed(to_signed64(to_signed64(chunk_x * a) ^ to_signed64(chunk_z * b) ^ seed))
-    return ROTATIONS[random.next_int(4)]
+    return random
+
+
+def site_rotation(seed: int, chunk_x: int, chunk_z: int) -> str:
+    """The turn the game gives a build here, without generating anything."""
+    return ROTATIONS[chunk_random(seed, chunk_x, chunk_z).next_int(4)]
 
 
 def chosen_build(seed: int, site: Site, entries: list[dict]) -> str | None:
     """Which build of a set the game tries at this site.
 
-    A set holds several builds with weights and picks one per site. If that one
-    is refused, the game drops it and draws again from what is left, so this is
-    the first choice rather than the last word; where the builds of a set share
-    a biome list, which is the usual case, the first choice is what gets built.
+    A set holds several builds with weights and picks one per site. A build the
+    game then refuses is dropped and another drawn, so this is the first choice
+    rather than the last word. Where the builds of a set share a biome list,
+    which is the usual case, the first choice is what gets built.
     """
     weights = [(e.get("structure"), int(e.get("weight", 1))) for e in entries]
     total = sum(w for _, w in weights)
     if total <= 0:
         return None
-    random = JavaRandom(0)
-    random.set_seed(seed)
-    a, b = random.next_long(), random.next_long()
-    random.set_seed(to_signed64(to_signed64(site.chunk_x * a)
-                                ^ to_signed64(site.chunk_z * b) ^ seed))
-    pick = random.next_int(total)
+    pick = chunk_random(seed, site.chunk_x, site.chunk_z).next_int(total)
     for ident, weight in weights:
         pick -= weight
         if pick < 0:
@@ -237,8 +237,29 @@ def survey(world, source, found: list[Site], *, seed: int, biomes=None, sink: in
     return reports
 
 
+def owning_set_id(registries, structure_id: str) -> str | None:
+    """The structure set that places this build, if one does."""
+    return next((ident for ident in registries.ids("structure_set")
+                 if any(entry.get("structure") == structure_id
+                        for entry in (registries.get("structure_set", ident)
+                                      or {}).get("structures") or [])),
+                None)
+
+
+def owning_set(registries, structure_id: str) -> tuple[dict, str]:
+    """A build and the set that places it. Either half missing is the reason it
+    never appears, so say which."""
+    structure = registries.get("structure", structure_id)
+    if structure is None:
+        raise SystemExit(f"unknown structure {structure_id}")
+    owner = owning_set_id(registries, structure_id)
+    if owner is None:
+        raise SystemExit(f"no structure set places {structure_id}")
+    return structure, owner
+
+
 def set_reports(registries, world, source, set_id: str, seed: int,
-                x0: int, z0: int, x1: int, z1: int, step: int = 8,
+                x0: int, z0: int, x1: int, z1: int,
                 ground: bool = True) -> list[SiteReport]:
     """Every site of one structure set, surveyed as the build that will stand there.
 
@@ -258,7 +279,7 @@ def set_reports(registries, world, source, set_id: str, seed: int,
     reports = []
     for ident, group in by_build.items():
         structure = registries.get("structure", ident) or {}
-        template = registries.templates.get(structure.get("start_pool", ident))
+        template = registries.start_template(structure)
         size = (1, 1)
         if template is not None:
             grid = Grid.load(template)
@@ -266,7 +287,7 @@ def set_reports(registries, world, source, set_id: str, seed: int,
         reports += survey(world, source, group, seed=seed,
                           biomes=registries.biome_set(structure.get("biomes")),
                           sink=int((structure.get("start_height") or {}).get("absolute", 0)),
-                          size=size, step=step, build=ident, ground=ground)
+                          size=size, build=ident, ground=ground)
     return sorted(reports, key=lambda r: (r.site.chunk_x, r.site.chunk_z))
 
 
@@ -279,16 +300,9 @@ def build_on_site(registries, world, source, structure_id: str, seed: int,
     without generating a world. The ground the game will lay against the build
     itself is not modelled, so this is the land before the build lands on it.
     """
-    structure = registries.get("structure", structure_id)
-    if structure is None:
-        raise SystemExit(f"unknown structure {structure_id}")
-    owner = next((ident for ident in registries.ids("structure_set")
-                  if any(e.get("structure") == structure_id
-                         for e in (registries.get("structure_set", ident)
-                                   or {}).get("structures") or [])),
-                 None)
-    if owner is None:
-        raise SystemExit(f"no structure set places {structure_id}")
+    if index < 0:
+        raise SystemExit(f"site index must be 0 or more, got {index}")
+    structure, owner = owning_set(registries, structure_id)
     kept: list[SiteReport] = []
     span = 1024
     while span <= reach and len(kept) <= index:
@@ -299,9 +313,16 @@ def build_on_site(registries, world, source, structure_id: str, seed: int,
     if not kept:
         raise SystemExit(f"no site within {reach} blocks keeps {structure_id}")
     kept.sort(key=lambda r: abs(r.site.x) + abs(r.site.z))
-    chosen = kept[min(index, len(kept) - 1)]
+    if index >= len(kept):
+        raise SystemExit(f"{structure_id} has {len(kept)} site(s) within {reach} "
+                         f"blocks, so there is no site {index}")
+    chosen = kept[index]
 
-    template = Grid.load(registries.templates[structure.get("start_pool", structure_id)])
+    path = registries.start_template(structure)
+    if path is None:
+        raise SystemExit(f"{structure_id} has no template to draw, "
+                         f"check the pool {structure.get('start_pool')} names one")
+    template = Grid.load(path)
     # the ground was skipped while picking, so measure it for the one site chosen
     report = survey(world, source, [chosen.site], seed=seed, build=structure_id,
                     biomes=registries.biome_set(structure.get("biomes")),
@@ -327,7 +348,8 @@ def build_on_site(registries, world, source, structure_id: str, seed: int,
             if low <= top <= high:
                 grid.set(ix, top - low, iz, surface)
             if top < sea:
-                grid.fill(ix, max(top + 1, low) - low, iz, ix, sea - low, iz,
+                # the top water block is at sea_level - 1, as it is in game
+                grid.fill(ix, max(top + 1, low) - low, iz, ix, sea - 1 - low, iz,
                           "minecraft:water[level=0]")
 
     for (tx, ty, tz), spec in template.items():
