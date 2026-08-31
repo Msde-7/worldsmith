@@ -37,6 +37,12 @@ KEEP_LO, KEEP_HI = 23, 40
 KEEP_FLOORS = [GROUND, 17, 24, 31]
 KEEP_ROOF = 38
 
+# blocks that need something to hang on, so a ruin does not leave them in mid air
+LOOSE = ("red_banner", "red_wall_banner", "torch", "wall_torch", "lantern", "ladder",
+         "chest", "barrel", "crafting_table", "anvil", "furnace", "campfire",
+         "candle", "lectern", "red_bed", "red_carpet", "oak_door", "cobblestone_wall",
+         "hay_block", "wheat", "farmland", "iron_bars", "oak_fence", "bookshelf")
+
 TOWER_R = 6.0
 TOWER_TOP = 30
 GATE_X0, GATE_X1 = 30, 33        # the passage through the south wall
@@ -756,17 +762,14 @@ def ruinate(grid: Grid, keep_level: int = GROUND) -> Grid:
                             grid.set(x, y, z, f"minecraft:vine[{side}=true]")
                         break
     # nothing is left hanging in mid air once its wall has gone
-    loose = ("red_banner", "red_wall_banner", "torch", "wall_torch", "lantern", "ladder",
-             "chest", "barrel", "crafting_table", "anvil", "furnace", "campfire",
-             "candle", "lectern", "red_bed", "red_carpet", "oak_door", "cobblestone_wall",
-             "hay_block", "wheat", "farmland", "iron_bars", "oak_fence", "bookshelf")
+    def unsupported(name):
+        return name in ("", "air") or name in LOOSE
+
     for x in range(grid.sx):
         for z in range(grid.sz):
             for y in range(top, keep_level, -1):
-                if grid.name_at(x, y, z) not in loose:
+                if grid.name_at(x, y, z) not in LOOSE:
                     continue
-                def unsupported(name):
-                    return name in ("", "air") or name in loose
                 below = grid.name_at(x, y - 1, z)
                 sides = [grid.name_at(x + dx, y, z + dz)
                          for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1))]

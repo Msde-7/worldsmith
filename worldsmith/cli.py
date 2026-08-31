@@ -104,7 +104,7 @@ def _load(args) -> tuple[World, BiomeSource, str]:
 
 def _value_at(node, x, y, z) -> float:
     ctx = Ctx(np.array([[float(x)]]), np.array([[float(y)]]), np.array([[float(z)]]))
-    return float(np.ravel(np.broadcast_to(np.asarray(node.eval(ctx), float), (1, 1)))[0])
+    return float(np.ravel(np.asarray(node.eval(ctx), float))[0])
 
 
 def cmd_new(args):

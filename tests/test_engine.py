@@ -1458,7 +1458,8 @@ def test_cli_smoke():
         ]
         for argv in runs:
             code = run(argv)
-            check(f"worldsmith {argv[0]} {' '.join(argv[2:4])} runs", code == 0, str(code))
+            check(f"worldsmith {' '.join(a for a in argv if not a.startswith(tmp))} runs",
+                  code == 0, str(code))
         check("build --id wrote a drawing", out.is_file())
         check("build --plan wrote the slices too",
               out.with_name(out.stem + "_plan.png").is_file())

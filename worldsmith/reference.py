@@ -446,7 +446,7 @@ Useful while debugging:
 
 
 def reference_text(topic_name: str = "index") -> str:
-    if topic_name in ("index", "", None):
+    if topic_name in ("index", ""):
         lines = ["worldsmith reference topics:", ""]
         for name in TOPICS:
             first = TOPICS[name].splitlines()[0]
