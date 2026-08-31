@@ -256,9 +256,18 @@ class Grid:
 
     def fill(self, x0, y0, z0, x1, y1, z1, spec: str) -> None:
         value = self.id_of(spec)
-        self.cells[max(0, min(x0, x1)):min(self.sx, max(x0, x1) + 1),
-                   max(0, min(y0, y1)):min(self.sy, max(y0, y1) + 1),
-                   max(0, min(z0, z1)):min(self.sz, max(z0, z1) + 1)] = value
+        # both ends clamped: a stop below 0 is an index from the end in numpy,
+        # so a box wholly outside the grid would fill part of it
+        box = [(max(0, min(a, b)), min(size, max(a, b) + 1))
+               for (a, b), size in (((x0, x1), self.sx), ((y0, y1), self.sy),
+                                    ((z0, z1), self.sz))]
+        if any(lo >= hi for lo, hi in box):
+            return
+        (x_lo, x_hi), (y_lo, y_hi), (z_lo, z_hi) = box
+        self.cells[x_lo:x_hi, y_lo:y_hi, z_lo:z_hi] = value
+        for key in [k for k in self.block_entities
+                    if x_lo <= k[0] < x_hi and y_lo <= k[1] < y_hi and z_lo <= k[2] < z_hi]:
+            del self.block_entities[key]
 
     def counts(self) -> dict[str, int]:
         used = {index: int(n) for index, n in
@@ -280,7 +289,7 @@ class Grid:
         columns = sorted(((x, z) for x in range(self.sx) for z in range(self.sz)),
                          key=lambda c: abs(c[0] - middle[0]) + abs(c[1] - middle[1]))
         for x, z in columns:
-            for y in range(self.sy - 3, 0, -1):
+            for y in range(self.sy - 3, -1, -1):
                 here = int(self.cells[x, y, z])
                 if not here or here in air:
                     continue

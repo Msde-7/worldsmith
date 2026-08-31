@@ -43,9 +43,13 @@ def fill(grid: Grid, x0, y0, z0, x1, y1, z1, block) -> None:
 
 def hollow_box(grid: Grid, x0, y0, z0, x1, y1, z1, wall, inner="minecraft:air",
                thickness: int = 1) -> None:
-    """Four walls, floor and ceiling left to the caller, and a hollow middle."""
+    """Four walls, floor and ceiling left to the caller, and a hollow middle.
+
+    A box too thin to hold walls that thick stays solid, rather than having the
+    inner fill turn back on itself and hollow the whole thing out.
+    """
     fill(grid, x0, y0, z0, x1, y1, z1, wall)
-    if inner is not None:
+    if abs(x1 - x0) >= 2 * thickness and abs(z1 - z0) >= 2 * thickness:
         fill(grid, x0 + thickness, y0, z0 + thickness,
              x1 - thickness, y1, z1 - thickness, inner)
 
