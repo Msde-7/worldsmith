@@ -10,9 +10,10 @@
 **Describe a world out loud and let an AI build it.** worldsmith is Minecraft's
 world generation reimplemented in Python, bit for bit, so a model can draw the
 terrain in a couple of seconds instead of launching the game and flying around
-to find out what it made. It does the same for what stands on the terrain:
-castles, towers, anything made of blocks, drawn and placed and checked before
-the game is ever started.
+to find out what it made. It does the same for whatever you want standing on
+that ground. A build is a box of blocks you fill in, and worldsmith turns it
+into the files Minecraft places from, so the thing and the ground it lands on
+are both drawn before the game is ever started.
 
 That is the part that matters. Most tools write worldgen JSON and hope. Here the
 model writes the JSON, renders it, **looks at the picture**, and goes back and
@@ -137,47 +138,52 @@ shows up in the Data Packs list on the world-creation screen, so New World still
 gives you an ordinary world. Running the server writes `eula=true` inside
 `.runtime/`, which accepts Mojang's EULA.
 
-## The other half: things to put in it
+## The other half, what stands on the terrain
 
 Terrain is half of a world. The other half is what stands on it, and that is the
-same loop again: write it, draw it, look at the picture, change it.
+same loop again. Write it, draw it, look at the picture, change it.
 
-A build is a box of blocks. `structures.add` turns that box into the four files
-the game needs, and from then on Minecraft places it exactly the way it places a
-village.
+A build is a box of blocks. You fill the box, `structures.add` turns it into the
+four files the game needs, and from then on Minecraft places it exactly the way
+it places a village. Nothing in worldsmith knows what the box is meant to be, so
+a hut, a lighthouse, a broken bridge and a castle are all the same job.
 
 ```python
 grid = Grid(32, 24, 32)
 grid.fill(4, 8, 4, 27, 20, 27, "minecraft:stone_bricks")
 grid.fill(5, 9, 5, 26, 19, 26, "minecraft:air")          # air is what hollows it
-structures.add(writer, "keep:tower", grid, ["minecraft:plains"], sink=-9)
+structures.add(writer, "mine:hut", grid, ["minecraft:plains"], sink=-9)
 ```
 
-![great castle](renders/castle_iso.png)
-![ruined castle](renders/castle_ruin_iso.png)
+`worldsmith.shapes` has the geometry that is tedious to get right, walls and
+round towers and crenellation and pitched roofs and stair flights, and none of
+it knows what it is part of either.
 
 ```bash
-worldsmith new    packs/keep --with-build   # start from a build that works
-worldsmith build  packs/keep --id keep:tower --plan 8,14   # draw it
-worldsmith build  packs/keep --id keep:tower --site 0      # draw it on its ground
-worldsmith sites  packs/keep            # where it lands, and on what ground
-worldsmith render packs/keep --builds   # those sites, on the terrain
-worldsmith play   packs/keep --spawn-at keep:tower
+worldsmith new    packs/mine --namespace mine --with-build   # start from one that works
+worldsmith build  packs/mine --id mine:hut --plan 4,6    # draw it
+worldsmith build  packs/mine --id mine:hut --site 0      # draw it on its ground
+worldsmith sites  packs/mine            # where it lands, and on what ground
+worldsmith render packs/mine --builds   # those sites, on the terrain
+worldsmith play   packs/mine --spawn-at mine:hut
 ```
 
-![a castle drawn on the ground it will stand on](renders/build_on_site.png)
+![a build drawn on the ground it will stand on](renders/build_on_site.png)
 
 That picture took a second and no Minecraft. It is a build pasted into the
 terrain at the site the game will choose, at the height the game will put it,
-and the label is the site: floor height, biome, and twenty blocks of relief
-across the footprint, which is why the ground climbs away on the right.
+and the label reads out that site, meaning floor height, biome, and twenty
+blocks of relief across the footprint, which is why the ground climbs away on
+the right. The castle in it comes from one of the example packs below.
 
 `sites` is the useful one. Where the game will put a build is not a mystery to
-be discovered by generating a world and flying around: it is a spread of one
+be discovered by generating a world and flying around. It is a spread of one
 chunk per region, a rotation, and a biome check, all of which are reproducible.
 worldsmith reproduces them and then asks the terrain half what the ground is
 like at each one, so a build about to sit in a lake or on twenty blocks of
 relief says so before a server ever starts.
+
+Here is that on castle_country, the example pack with castles in it.
 
 ```
 castle:great_castles  spacing 24, separation 10
@@ -186,7 +192,7 @@ castle:great_castles  spacing 24, separation 10
     great_castle     x    -271 z     129  shore     ground y  72  relief  11  no: shore
 ```
 
-That model is checked against Minecraft rather than trusted:
+That model is checked against Minecraft rather than trusted.
 `tools/verify_placement.py` drops a build into an ordinary vanilla world and
 compares site for site, then reads the blocks back out of the region files.
 
@@ -203,22 +209,18 @@ it draws from a weighted set on all 46, and the height a build lands at on all
 46. `worldsmith inspect` makes the same comparison about a world you already
 have.
 
-![a castle as the game built it](renders/final_great_castle.png)
-
-Builds also reach a world you already play, which terrain cannot: terrain is
+Builds also reach a world you already play, which terrain cannot. Terrain is
 baked into `level.dat` when a world is made, while structure sets are read every
 time a chunk generates. Drop the zip in `<world>/datapacks/` and the builds are
-in everything generated from then on. Measured on a world made without the pack:
-nothing at spawn, twelve builds in a patch generated two thousand blocks away
-after the pack went in.
-
-**castle_country** is the pack that uses both halves: downs and oak woods over
-flat topped crags, with castles, ruins and tower keeps standing in it. Its crag
-noise feeds the router's weirdness, so the biome boxes follow the crags, and
-since biomes are the only placement rule the game gives you, that is how a pack
-says "build on the high ground".
+in everything generated from then on. Measured on a world made without the pack,
+nothing at spawn, then twelve builds in a patch generated two thousand blocks
+away after the pack went in.
 
 ## The packs in here
+
+Everything in `packs/` is an example. Each one was asked for in a sentence and
+then rendered and adjusted until it looked right, and the script that wrote it
+is in `examples/`. None of it is worldsmith. It is what worldsmith made.
 
 **red_canyons**, a tableland cut by slot gorges. The canyon network is
 `abs(noise)` near zero along a winding line, and the benches are a staircase
@@ -250,6 +252,21 @@ through the layers.
 
 ![terraced mesas](renders/terraced_mesas.png)
 
+**castle_country** is the one that uses both halves. Downs and oak woods over
+flat topped crags, with castles, ruins and tower keeps standing on them. Its
+crag noise feeds the router's weirdness, so the biome boxes follow the crags,
+and since biomes are the only placement rule the game gives you, that is how a
+pack says "build on the high ground".
+
+![great castle](renders/castle_iso.png)
+![ruined castle](renders/castle_ruin_iso.png)
+![a castle as the game built it](renders/final_great_castle.png)
+
+The castles are 850 lines of `examples/build_castles.py`, curtain walls and
+corner towers and a portcullis stacked out of `worldsmith.shapes` into a block
+grid. None of that geometry lives in worldsmith. A windmill or a sunken ship
+would be written the same way and placed by the same four files.
+
 `worldsmith new` scaffolds a plain continents-and-oceans world laid out to be
 edited, rendered in `renders/starter.png`.
 
@@ -266,11 +283,11 @@ worldsmith probe   packs/mine --at 100 64 -200 --density mine:offset mine:factor
 worldsmith column  packs/mine --at 100 -200      # one column, top to bottom
 
 worldsmith build   packs/mine                    # the builds in a pack
-worldsmith build   packs/mine --id mine:tower --plan 8,14
-worldsmith build   packs/mine --id mine:tower --site 0   # standing on its ground
+worldsmith build   packs/mine --id mine:hut --plan 4,6
+worldsmith build   packs/mine --id mine:hut --site 0     # standing on its ground
 worldsmith sites   packs/mine                    # where they land, and on what
 worldsmith render  packs/mine --builds           # that, drawn on the terrain
-worldsmith inspect <world> --pack packs/mine --structure mine:tower
+worldsmith inspect <world> --pack packs/mine --structure mine:hut
 worldsmith reference builds
 ```
 
@@ -339,8 +356,15 @@ after generation and a render never shows them.
 | `worldsmith/validate.py` | schema, references, splines, block ids, biome boxes, biome tags |
 | `worldsmith/render.py` | the four views and the contact sheet |
 | `worldsmith/play.py` | server runtime, spawn picking, world install |
+| `worldsmith/voxel.py` | a grid of blocks, and the `.nbt` template the game reads |
+| `worldsmith/shapes.py` | walls, towers, roofs and stairs, none of which know what they are part of |
+| `worldsmith/structures.py` | the four files that make the game place a build |
+| `worldsmith/placement.py` | where it will put them, worked out before the game is asked |
+| `worldsmith/draw.py` | isometric and plan views of a build |
+| `worldsmith/anvil.py` | reading back a world the game has already generated |
 | `vanilla/26.2/` | the vendored vanilla data it is checked against |
-| `tools/` | in-game verification, the deepslate oracle, block-colour extraction, the authoring scripts |
+| `tools/` | in-game verification, the deepslate oracle, block-colour extraction |
+| `examples/` | the scripts that wrote the packs in `packs/`, terrain and castles both |
 
 Renders are fast because every purely 2D function is evaluated once per column
 rather than once per block, the Perlin inner loop is a parallel numba kernel over

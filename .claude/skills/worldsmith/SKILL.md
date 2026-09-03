@@ -9,9 +9,9 @@ Write Minecraft terrain in JSON, render it, look at it, change it. The renderer
 is a bit-exact reimplementation of the game's worldgen, verified column-for-column
 against Minecraft itself, so what the image shows is what the game will build.
 
-There are two halves. Terrain is the one below; **builds** (castles, towers,
-anything made of blocks that the game places for you) are the section "The other
-half: building things", and they work on their own or together with terrain.
+There are two halves. Terrain is the one below, and **builds**, meaning anything
+made of blocks that the game places for you, are the section "The other half,
+building things". They work on their own or together with terrain.
 
 Run every command from the root of the worldsmith checkout.
 
@@ -64,11 +64,11 @@ Things worth knowing:
 * `--pregen 0` skips pre-building if they just want it installed quickly.
 * Existing worlds are **replaced** by name, so pick `--name` deliberately.
 
-## The other half: building things
+## The other half, building things
 
 Terrain and builds are separate halves and neither needs the other. A pack can
-be terrain only, builds only (a castle dropped into an ordinary vanilla world),
-or both. Read the reference before writing one:
+be terrain only, builds only, which is a build dropped into an ordinary vanilla
+world, or both. Read the reference before writing one:
 
 ```
 python -m worldsmith.cli reference builds
@@ -85,8 +85,10 @@ footing, hollow rooms, a door, a light, a loot chest) plus the three JSON files
 that place it. Then replace the geometry.
 
 A build is a box of blocks plus three JSON files, and `structures.add` writes
-all four. Put the geometry in a script under `tools/` and keep it there, so a
-build can be re-run and changed:
+all four. Keep the geometry in a script rather than a one-off, so the build can
+be re-run and changed. The example packs do it that way in `examples/`, and
+`examples/build_castles.py` is a large one to read if you want to see how far it
+goes.
 
 `worldsmith.shapes` has the geometry rather than writing loops for it: `speckle`
 (masonry mixed from several blocks so a wall does not read as extruded),
