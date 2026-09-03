@@ -39,7 +39,7 @@ AQUIFER_ROUTER = {
 }
 
 
-# The JSON these helpers build is shared with the authoring scripts in tools/.
+# The JSON these helpers build is shared with the authoring scripts in examples/.
 
 
 def spline(coordinate, points):

@@ -1,7 +1,10 @@
 # Castle country
 
-A custom overworld of rolling downs, oak woods, lakes and flat-topped crags,
-with real castles built into it by the game's own structure system.
+One of the example packs. A custom overworld of rolling downs, oak woods,
+lakes and flat-topped crags, with castles standing in it, written to show the
+two halves of worldsmith working together. Nothing here is part of worldsmith
+itself. The castles are geometry in `examples/build_castles.py`, and anything
+else made of blocks would be written the same way.
 
 ## What is in here
 
@@ -33,8 +36,8 @@ Two details matter and are easy to get wrong:
 
 ## Rebuilding it
 
-    python tools/build_castle_country.py      # terrain
-    python tools/build_castles.py             # the castles and their worldgen JSON
+    python examples/build_castle_country.py   # terrain
+    python examples/build_castles.py          # the castles and their worldgen JSON
     python -m worldsmith.cli check packs/castle_country
     python -m worldsmith.cli play  packs/castle_country
 
